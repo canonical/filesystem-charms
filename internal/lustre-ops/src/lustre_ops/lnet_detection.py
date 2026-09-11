@@ -6,6 +6,7 @@
 import json
 import logging
 import subprocess
+from typing import Any
 
 from lustre_ops.constants import IP_EXECUTABLE, RDMA_EXECUTABLE, SYS_CLASS_NET
 from lustre_ops.errors import LNetParseError, LNetQueryError
@@ -100,12 +101,64 @@ def _ipoib_netdev_map() -> dict[str, str]:
     return rdma_net_map
 
 
+def _is_netdev_up(netdev: str) -> bool:
+    """Return whether the given netdev is up according to sysfs.
+
+    Args:
+        netdev: The network interface name to check (e.g. ``ib0``).
+
+    Returns:
+        ``True`` if the interface is up, ``False`` if it is down or cannot be determined.
+    """
+    operstate_file = SYS_CLASS_NET / netdev / "operstate"
+    if not operstate_file.exists():
+        _logger.warning("operstate file not found for netdev %s", netdev)
+        return False
+
+    try:
+        operstate = operstate_file.read_text().strip().lower()
+    except OSError as e:
+        _logger.warning("failed to read operstate for netdev %s: %s", netdev, e)
+        return False
+
+    return operstate != "down"
+
+
+def _resolve_link_netdev(link: dict[str, Any], ipoib_map: dict[str, str]) -> str | None:
+    """Resolve the netdev associated with an RDMA link.
+
+    Args:
+        link: An RDMA link entry from ``rdma --json link show``.
+        ipoib_map: A mapping from RDMA device name to IPoIB netdev name.
+
+    Returns:
+        The netdev name (e.g. ``ib0``), or ``None`` if it cannot be resolved.
+    """
+    netdev = link.get("netdev")
+    if netdev:
+        return netdev
+
+    _logger.debug("RDMA link has no netdev: %s", link)
+    ifname = link.get("ifname")
+    if not ifname:
+        _logger.warning("RDMA link has no ifname: %s", link)
+        return None
+
+    netdev = ipoib_map.get(ifname)
+    if not netdev:
+        _logger.warning("no IPoIB netdev found for RDMA device %s", ifname)
+        return None
+
+    return netdev
+
+
 def _rdma_interfaces() -> list[str]:
     """Return netdev names associated with RDMA devices on this unit.
 
     Returns:
-        A list of netdev names (e.g. ``ib0``, ``ib1``) for all RDMA devices that are active and have
-        a physical link up. Empty if no RDMA devices are present or none are active.
+        A list of netdev names (e.g. ``ib0``, ``ib1``) for all RDMA devices that are active, have
+        a physical link up, and whose associated netdev is up. Empty if no RDMA devices are present
+        or none are active and up.
 
     Raises:
         LNetQueryError: If querying RDMA links fails.
@@ -139,23 +192,16 @@ def _rdma_interfaces() -> list[str]:
             _logger.info("ignoring inactive RDMA link: %s", link)
             continue
 
-        netdev = link.get("netdev")
+        netdev = _resolve_link_netdev(link, ipoib_map)
         if not netdev:
-            _logger.debug("RDMA link has no netdev: %s", link)
+            continue
 
-            ifname = link.get("ifname")
-            if not ifname:
-                _logger.warning("RDMA link has no ifname: %s", link)
-                continue
-
-            netdev = ipoib_map.get(ifname)
-            if not netdev:
-                _logger.warning("no IPoIB netdev found for RDMA device %s", ifname)
-                continue
+        if not _is_netdev_up(netdev):
+            _logger.info("ignoring down netdev: %s", netdev)
+            continue
 
         if netdev not in seen_interfaces:
             seen_interfaces.add(netdev)
             _logger.debug("detected RDMA interface %s for link %s", netdev, link)
 
-    rdma_interfaces = sorted(seen_interfaces)
-    return rdma_interfaces
+    return sorted(seen_interfaces)

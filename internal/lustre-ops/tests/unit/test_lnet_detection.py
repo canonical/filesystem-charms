@@ -86,8 +86,59 @@ class TestDefaultRouteInterface:
             lnet_detection._default_route_interface()
 
 
+class TestIsNetdevUp:
+    """_is_netdev_up() tests."""
+
+    @pytest.fixture(scope="function")
+    def sys_class_net(self, mocker: MockerFixture, tmp_path: Path) -> Path:
+        """Return sysfs net root mocked to a temp directory."""
+        mocker.patch("lustre_ops.lnet_detection.SYS_CLASS_NET", tmp_path)
+        return tmp_path
+
+    def test_netdev_up(self, sys_class_net: Path) -> None:
+        """Returns True when operstate is 'up'."""
+        netdev = sys_class_net / "ib0"
+        netdev.mkdir()
+        (netdev / "operstate").write_text("up\n")
+
+        assert lnet_detection._is_netdev_up("ib0") is True
+
+    def test_netdev_down(self, sys_class_net: Path) -> None:
+        """Returns False when operstate is 'down'."""
+        netdev = sys_class_net / "ib0"
+        netdev.mkdir()
+        (netdev / "operstate").write_text("down\n")
+
+        assert lnet_detection._is_netdev_up("ib0") is False
+
+    def test_netdev_missing_operstate(self, sys_class_net: Path) -> None:
+        """Returns False when operstate file does not exist."""
+        (sys_class_net / "ib0").mkdir()
+
+        assert lnet_detection._is_netdev_up("ib0") is False
+
+    def test_netdev_nonexistent(self, sys_class_net: Path) -> None:
+        """Returns False when netdev directory does not exist."""
+        assert lnet_detection._is_netdev_up("ib0") is False
+
+    def test_operstate_read_error(self, sys_class_net: Path, mocker: MockerFixture) -> None:
+        """Returns False when reading operstate raises an OSError."""
+        netdev = sys_class_net / "ib0"
+        netdev.mkdir()
+        operstate_file = netdev / "operstate"
+        operstate_file.write_text("up\n")
+        mocker.patch.object(Path, "read_text", side_effect=OSError("Permission denied"))
+
+        assert lnet_detection._is_netdev_up("ib0") is False
+
+
 class TestRdmaInterfaces:
     """_rdma_interfaces() tests."""
+
+    @pytest.fixture(autouse=True)
+    def mock_is_netdev_up(self, mocker: MockerFixture) -> MagicMock:
+        """Mock _is_netdev_up to return True by default."""
+        return mocker.patch("lustre_ops.lnet_detection._is_netdev_up", return_value=True)
 
     def _rdma_link(
         self,
@@ -145,6 +196,21 @@ class TestRdmaInterfaces:
                 self._rdma_link("mlx5_0", netdev="ib0", state="DOWN"),
                 self._rdma_link("mlx5_1", netdev="ib1"),
             ]
+        )
+
+        assert lnet_detection._rdma_interfaces() == ["ib1"]
+
+    def test_skips_down_netdev(self, mock_run: MagicMock, mocker: MockerFixture) -> None:
+        """Active RDMA devices whose associated netdev is down are skipped."""
+        mock_run.return_value.stdout = json.dumps(
+            [
+                self._rdma_link("mlx5_0", netdev="ib0"),
+                self._rdma_link("mlx5_1", netdev="ib1"),
+            ]
+        )
+        mocker.patch(
+            "lustre_ops.lnet_detection._is_netdev_up",
+            side_effect=lambda dev: dev != "ib0",
         )
 
         assert lnet_detection._rdma_interfaces() == ["ib1"]
