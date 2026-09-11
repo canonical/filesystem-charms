@@ -3,6 +3,7 @@
 
 """Lustre peer relation observer unit tests."""
 
+from typing import NamedTuple
 from unittest.mock import MagicMock
 
 import lustre_peer
@@ -44,10 +45,24 @@ def mock_model_with_relation(
 class TestMgsNidsPublished:
     """mgs_nids_published() tests."""
 
-    def test_leader_publishes_and_promotes(
-        self, mocker: MockerFixture, mock_model: MagicMock
-    ) -> None:
-        """Leader MGS unit publishes NIDs to unit data and promotes itself to app data."""
+    class MgsPublishMocks(NamedTuple):
+        """Mocked environment for mgs_nids_published() tests."""
+
+        model: MagicMock
+        observer: lustre_peer.LustrePeerObserver
+        app_data: lustre_peer.LustrePeerAppData
+        set_unit_data: MagicMock
+        set_app_data: MagicMock
+        set_unit_ready: MagicMock
+        publish_fs_info: MagicMock
+
+    @pytest.fixture(scope="function")
+    def mgs_publish(self, mock_model: MagicMock, mocker: MockerFixture) -> MgsPublishMocks:
+        """Leader MGS unit with mocked peer databags. get_nids returns MGS_NIDS.
+
+        Tests pre-populate `app_data` and adjust `model.unit.*` before calling
+        mgs_nids_published().
+        """
         mock_model.unit.is_leader.return_value = True
         mock_model.unit.name = MGS_UNIT_NAME
         mocker.patch("lustre_peer.lnet.get_nids", return_value=MGS_NIDS)
@@ -55,141 +70,100 @@ class TestMgsNidsPublished:
             "lustre_peer.LustrePeerObserver.get_unit_data",
             return_value=lustre_peer.LustrePeerUnitData(),
         )
-        mocker.patch(
-            "lustre_peer.LustrePeerObserver.get_app_data",
-            return_value=lustre_peer.LustrePeerAppData(),
+        app_data = lustre_peer.LustrePeerAppData()
+        mocker.patch("lustre_peer.LustrePeerObserver.get_app_data", return_value=app_data)
+        return self.MgsPublishMocks(
+            model=mock_model,
+            observer=lustre_peer.LustrePeerObserver(mocker.MagicMock()),
+            app_data=app_data,
+            set_unit_data=mocker.patch("lustre_peer.LustrePeerObserver.set_unit_data"),
+            set_app_data=mocker.patch("lustre_peer.LustrePeerObserver.set_app_data"),
+            set_unit_ready=mocker.patch("lustre_peer.LustrePeerObserver.set_unit_ready"),
+            publish_fs_info=mocker.patch(
+                "lustre_peer.LustrePeerObserver._try_publish_filesystem_info"
+            ),
         )
-        set_unit_data = mocker.patch("lustre_peer.LustrePeerObserver.set_unit_data")
-        set_app_data = mocker.patch("lustre_peer.LustrePeerObserver.set_app_data")
-        set_ready = mocker.patch("lustre_peer.LustrePeerObserver.set_unit_ready")
 
-        observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
-        result = observer.mgs_nids_published()
+    def test_leader_publishes_and_promotes(self, mgs_publish: MgsPublishMocks) -> None:
+        """Leader MGS unit publishes NIDs to unit data and promotes itself to app data."""
+        mgs_publish.observer.mgs_nids_published()
 
-        assert result == MGS_NIDS
-
-        unit_data = set_unit_data.call_args[0][0]
+        unit_data = mgs_publish.set_unit_data.call_args[0][0]
         assert unit_data.mgs_nids == MGS_NIDS
 
-        app_data = set_app_data.call_args[0][0]
+        app_data = mgs_publish.set_app_data.call_args[0][0]
         assert app_data.mgs_nids == MGS_NIDS
         assert app_data.mgs_unit_name == MGS_UNIT_NAME
 
         # A relation-changed event is not triggered on the unit that writes to
         # its own unit data, so the leader must ready itself here. The publish
         # attempt is included in set_unit_ready.
-        set_ready.assert_called_once_with(MGS_NIDS, LUSTRE_FSNAME)
+        mgs_publish.set_unit_ready.assert_called_once_with(MGS_NIDS, LUSTRE_FSNAME)
 
-    def test_non_leader_publishes_unit_data_only(
-        self, mocker: MockerFixture, mock_model: MagicMock
-    ) -> None:
+    def test_non_leader_publishes_unit_data_only(self, mgs_publish: MgsPublishMocks) -> None:
         """Non-leader MGS unit publishes NIDs to unit data but not app data."""
-        mock_model.unit.is_leader.return_value = False
-        mock_model.unit.name = MGS_UNIT_NAME
-        mocker.patch("lustre_peer.lnet.get_nids", return_value=MGS_NIDS)
-        mocker.patch(
-            "lustre_peer.LustrePeerObserver.get_unit_data",
-            return_value=lustre_peer.LustrePeerUnitData(),
-        )
-        set_unit_data = mocker.patch("lustre_peer.LustrePeerObserver.set_unit_data")
-        set_app_data = mocker.patch("lustre_peer.LustrePeerObserver.set_app_data")
-        set_ready = mocker.patch("lustre_peer.LustrePeerObserver.set_unit_ready")
-        publish_fs_info = mocker.patch(
-            "lustre_peer.LustrePeerObserver._try_publish_filesystem_info"
-        )
+        mgs_publish.model.unit.is_leader.return_value = False
 
-        observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
-        result = observer.mgs_nids_published()
+        mgs_publish.observer.mgs_nids_published()
 
-        assert result == MGS_NIDS
-
-        unit_data = set_unit_data.call_args[0][0]
+        unit_data = mgs_publish.set_unit_data.call_args[0][0]
         assert unit_data.mgs_nids == MGS_NIDS
 
-        set_app_data.assert_not_called()
-        set_ready.assert_not_called()
-        publish_fs_info.assert_not_called()
+        mgs_publish.set_app_data.assert_not_called()
+        mgs_publish.set_unit_ready.assert_not_called()
+        mgs_publish.publish_fs_info.assert_not_called()
 
-    def test_get_nid_fails(self, mocker: MockerFixture, mock_model: MagicMock) -> None:
+    def test_get_nid_fails(
+        self,
+        mocker: MockerFixture,
+        mgs_publish: MgsPublishMocks,
+    ) -> None:
         """Unit raises an error when get_nids() fails."""
         mocker.patch(
             "lustre_peer.lnet.get_nids",
             side_effect=LNetError("test get_nids failed"),
         )
 
-        observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
         with pytest.raises(lustre_peer.LustrePeerError, match="Failed to determine MGS NID"):
-            observer.mgs_nids_published()
+            mgs_publish.observer.mgs_nids_published()
 
-    def test_empty_nids(self, mocker: MockerFixture, mock_model: MagicMock) -> None:
+    def test_empty_nids(
+        self,
+        mocker: MockerFixture,
+        mgs_publish: MgsPublishMocks,
+    ) -> None:
         """Unit raises an error when no NIDs are configured."""
         mocker.patch("lustre_peer.lnet.get_nids", return_value=[])
 
-        observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
         with pytest.raises(
             lustre_peer.LustrePeerError, match="No LNet NIDs configured on this unit"
         ):
-            observer.mgs_nids_published()
+            mgs_publish.observer.mgs_nids_published()
 
-    def test_leader_republish_idempotent(
-        self, mocker: MockerFixture, mock_model: MagicMock
-    ) -> None:
+    def test_leader_republish_idempotent(self, mgs_publish: MgsPublishMocks) -> None:
         """Leader re-publishing matching NIDs does not rewrite app data."""
-        mock_model.unit.is_leader.return_value = True
-        mock_model.unit.name = MGS_UNIT_NAME
-        existing = lustre_peer.LustrePeerAppData(mgs_nids=MGS_NIDS, mgs_unit_name=MGS_UNIT_NAME)
-        mocker.patch("lustre_peer.lnet.get_nids", return_value=MGS_NIDS)
-        mocker.patch(
-            "lustre_peer.LustrePeerObserver.get_unit_data",
-            return_value=lustre_peer.LustrePeerUnitData(),
-        )
-        mocker.patch("lustre_peer.LustrePeerObserver.get_app_data", return_value=existing)
-        mocker.patch("lustre_peer.LustrePeerObserver.set_unit_data")
-        set_app_data = mocker.patch("lustre_peer.LustrePeerObserver.set_app_data")
-        mocker.patch("lustre_peer.LustrePeerObserver.set_unit_ready")
-        mocker.patch("lustre_peer.LustrePeerObserver._try_publish_filesystem_info")
+        mgs_publish.app_data.mgs_nids = MGS_NIDS
+        mgs_publish.app_data.mgs_unit_name = MGS_UNIT_NAME
 
-        observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
-        result = observer.mgs_nids_published()
+        mgs_publish.observer.mgs_nids_published()
 
-        assert result == MGS_NIDS
-        set_app_data.assert_not_called()
+        mgs_publish.set_app_data.assert_not_called()
 
-    def test_leader_nids_changed_error(self, mocker: MockerFixture, mock_model: MagicMock) -> None:
+    def test_leader_nids_changed_error(self, mgs_publish: MgsPublishMocks) -> None:
         """Leader raises an error when its NIDs change after promotion."""
-        mock_model.unit.is_leader.return_value = True
-        mock_model.unit.name = MGS_UNIT_NAME
-        existing = lustre_peer.LustrePeerAppData(
-            mgs_nids=["10.0.0.99@tcp"], mgs_unit_name=MGS_UNIT_NAME
-        )
-        mocker.patch("lustre_peer.lnet.get_nids", return_value=MGS_NIDS)
-        mocker.patch(
-            "lustre_peer.LustrePeerObserver.get_unit_data",
-            return_value=lustre_peer.LustrePeerUnitData(),
-        )
-        mocker.patch("lustre_peer.LustrePeerObserver.get_app_data", return_value=existing)
-        mocker.patch("lustre_peer.LustrePeerObserver.set_unit_data")
+        mgs_publish.app_data.mgs_nids = ["10.0.0.99@tcp"]
+        mgs_publish.app_data.mgs_unit_name = MGS_UNIT_NAME
 
-        observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
         with pytest.raises(lustre_peer.LustrePeerError, match="MGS NIDs changed"):
-            observer.mgs_nids_published()
+            mgs_publish.observer.mgs_nids_published()
 
-    def test_duplicate_mgs_error(self, mocker: MockerFixture, mock_model: MagicMock) -> None:
+    def test_duplicate_mgs_error(self, mgs_publish: MgsPublishMocks) -> None:
         """Leader raises an error when another unit is already the assigned MGS."""
-        mock_model.unit.is_leader.return_value = True
-        mock_model.unit.name = MGS_UNIT_NAME
-        existing = lustre_peer.LustrePeerAppData(mgs_nids=MGS_NIDS, mgs_unit_name=OSS_UNIT_NAME)
-        mocker.patch("lustre_peer.lnet.get_nids", return_value=MGS_NIDS)
-        mocker.patch(
-            "lustre_peer.LustrePeerObserver.get_unit_data",
-            return_value=lustre_peer.LustrePeerUnitData(),
-        )
-        mocker.patch("lustre_peer.LustrePeerObserver.get_app_data", return_value=existing)
-        mocker.patch("lustre_peer.LustrePeerObserver.set_unit_data")
+        mgs_publish.app_data.mgs_nids = MGS_NIDS
+        mgs_publish.app_data.mgs_unit_name = OSS_UNIT_NAME
 
-        observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
         with pytest.raises(LustrePeerDuplicateMgsError, match="already the MGS"):
-            observer.mgs_nids_published()
+            mgs_publish.observer.mgs_nids_published()
 
 
 class TestOnRelationChanged:
