@@ -118,7 +118,7 @@ class LustreCharm(ops.CharmBase):
         self.unit.status = ops.MaintenanceStatus(_CharmStatus.PREPARING_SERVICES)
 
     @refresh_check_lustre
-    def _on_start(self, _: ops.StartEvent | ops.StorageAttachedEvent) -> None:
+    def _on_start(self, _: ops.HookEvent) -> None:
         """Set up Lustre services."""
         if not lustre_fs.is_lustre_installed():
             logger.warning("attempted to start services before Lustre packages installed")
@@ -158,7 +158,7 @@ class LustreCharm(ops.CharmBase):
         """Set up this unit as MGS+MDS. Idempotent."""
         try:
             lustre_fs.mgs_mds_setup(LUSTRE_FSNAME, devices)
-            _ = self.peers.mgs_nids_published()
+            self.peers.mgs_nids_published()
         except LustrePeerDuplicateMgsError as e:
             logger.exception("multiple units attempting to run MGS+MDS: %s", e)
             raise StopCharm(ops.BlockedStatus(_CharmStatus.MULTIPLE_MGS_UNITS))

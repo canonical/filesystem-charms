@@ -78,16 +78,13 @@ class LustrePeerObserver(ops.Object):
             charm.on[PEER_RELATION].relation_changed, self._on_relation_changed
         )
 
-    def mgs_nids_published(self) -> list[str]:
+    def mgs_nids_published(self) -> None:
         """Publish this unit's MGS NIDs to its unit databag.
 
         The leader promotes these to app data when it observes the relation-changed
         event triggered by this write. If this unit is itself the leader, no such
         event will arrive (a unit does not receive relation-changed for writes to
         its own databag), so it promotes itself immediately.
-
-        Returns:
-            The published MGS NID strings.
 
         Raises:
             LustrePeerError: If an error occurs publishing the MGS NIDs.
@@ -110,8 +107,6 @@ class LustrePeerObserver(ops.Object):
             # wait for an event that will never arrive.
             self._promote_mgs_nids(self.model.unit.name, mgs_nids)
             self.set_unit_ready(mgs_nids, LUSTRE_FSNAME)
-
-        return mgs_nids
 
     def get_app_data(self) -> LustrePeerAppData:
         """Return the application data in the peer relation databag.
@@ -240,21 +235,23 @@ class LustrePeerObserver(ops.Object):
             LustrePeerError: If this unit's NIDs have changed since promotion.
         """
         data = self.get_app_data()
-        if data.mgs_unit_name and data.mgs_nids:
-            if data.mgs_unit_name == unit_name:
-                if sorted(data.mgs_nids) != sorted(mgs_nids):
-                    raise LustrePeerError(
-                        f"MGS NIDs changed for unit {unit_name}: {data.mgs_nids} -> {mgs_nids}"
-                    )
-                return  # Same unit re-publishing. Idempotent.
+        if not (data.mgs_unit_name and data.mgs_nids):
+            data.mgs_nids = mgs_nids
+            data.mgs_unit_name = unit_name
+            self.set_app_data(data)
+            _logger.info("promoted MGS NIDs %s from unit %s to app data", mgs_nids, unit_name)
+            return
+
+        if data.mgs_unit_name != unit_name:
             raise LustrePeerDuplicateMgsError(
                 f"Unit {unit_name} attempted to publish MGS NIDs. Unit {data.mgs_unit_name} is already the MGS. Multiple MGSes are not supported."
             )
 
-        data.mgs_nids = mgs_nids
-        data.mgs_unit_name = unit_name
-        self.set_app_data(data)
-        _logger.info("promoted MGS NIDs %s from unit %s to app data", mgs_nids, unit_name)
+        if sorted(data.mgs_nids) != sorted(mgs_nids):
+            raise LustrePeerError(
+                f"MGS NIDs changed for unit {unit_name}: {data.mgs_nids} -> {mgs_nids}"
+            )
+        # Same unit re-publishing. Idempotent.
 
     def _try_oss_setup(self, data: LustrePeerAppData) -> bool:
         """Set up OSS services on this unit if it is not the MGS+MDS unit.
