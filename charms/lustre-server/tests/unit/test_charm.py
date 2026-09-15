@@ -213,7 +213,9 @@ class TestCharmStart:
 
         out = ctx.run(ctx.on.start(), testing.State(leader=True))
 
-        assert out.unit_status == testing.MaintenanceStatus(charm._CharmStatus.WAITING_FOR_PACKAGES)
+        assert out.unit_status == testing.MaintenanceStatus(
+            charm._CharmStatus.WAITING_FOR_PACKAGES
+        )
         mock_mgs_mds_setup.assert_not_called()
         mock_oss_setup.assert_not_called()
 
@@ -249,6 +251,25 @@ class TestCharmStart:
         out = ctx.run(ctx.on.start(), testing.State(leader=True))
 
         assert out.unit_status == testing.BlockedStatus(charm._CharmStatus.DUPLICATE_STORAGE_ERROR)
+        mock_mgs_mds_setup.assert_not_called()
+        mock_oss_setup.assert_not_called()
+
+    def test_duplicate_mgs_unit(
+        self,
+        ctx: testing.Context[charm.LustreCharm],
+        mock_mgs_mds_setup: MagicMock,
+        mock_oss_setup: MagicMock,
+        mock_peer_observer: MagicMock,
+        mock_storage_devices: dict[str, list[MagicMock]],
+    ) -> None:
+        """Unit with MGT+MDT storage attached while another unit is already the MGS is blocked."""
+        self._attach(mock_storage_devices, "mgt-mdt", MGT_MDT_DEVICES)
+        app_data = LustrePeerAppData(mgs_nids=["10.0.0.1@tcp"], mgs_unit_name=f"{APP_NAME}/1")
+        mock_peer_observer.return_value.get_app_data.return_value = app_data
+
+        out = ctx.run(ctx.on.start(), testing.State(leader=True))
+
+        assert out.unit_status == testing.BlockedStatus(charm._CharmStatus.MULTIPLE_MGS_UNITS)
         mock_mgs_mds_setup.assert_not_called()
         mock_oss_setup.assert_not_called()
 
