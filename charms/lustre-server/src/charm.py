@@ -146,6 +146,17 @@ class LustreCharm(ops.CharmBase):
         if mgt_mdt_devices and ost_devices:
             raise StopCharm(ops.BlockedStatus(_CharmStatus.DUPLICATE_STORAGE_ERROR))
 
+        # Early exit if duplicate MGS detected.
+        # The `LustrePeerDuplicateMgsError` check in `_become_mgs_mds` is still needed to
+        # handle the race condition where multiple units initially deploy as the MGS+MDS
+        # and reach this point before the peer relation is updated with the MGS unit name.
+        if (
+            mgt_mdt_devices
+            and data.mgs_unit_name is not None
+            and data.mgs_unit_name != self.model.unit.name
+        ):
+            raise StopCharm(ops.BlockedStatus(_CharmStatus.MULTIPLE_MGS_UNITS))
+
         if mgt_mdt_devices:
             self._become_mgs_mds(mgt_mdt_devices)
         elif ost_devices:
