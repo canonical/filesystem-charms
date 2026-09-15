@@ -15,6 +15,10 @@ class LustreFilesystemError(LustreError):
     """Raised when a Lustre file system operation fails."""
 
 
+class LustreFilesystemDeviceCountError(LustreFilesystemError):
+    """Raised when an invalid number of devices is provided for a Lustre pool."""
+
+
 class LustrePeerError(LustreError):
     """Raised when a Lustre peer relation operation fails."""
 

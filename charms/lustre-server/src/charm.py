@@ -22,6 +22,7 @@ from constants import (
     OST_STORAGE,
 )
 from errors import (
+    LustreFilesystemDeviceCountError,
     LustreFilesystemError,
     LustrePeerDuplicateMgsError,
     LustrePeerError,
@@ -48,7 +49,11 @@ class _CharmStatus(StrEnum):
     STARTING_SERVICES = "Starting Lustre services"
     FAILED_PEER_DATA = "Failed to get peer relation app data"
     FAILED_MGS_MDS_SETUP = "Failed to set up MGS+MDS"
+    INVALID_MGT_MDT_DEVICE_COUNT = (
+        "MGT+MDT storage requires an even number of devices (at least 2) for mirroring"
+    )
     FAILED_OSS_SETUP = "Failed to set up OSS"
+    INVALID_OSS_DEVICE_COUNT = "OST storage requires at least 3 devices for RAIDZ2"
     MULTIPLE_MGS_UNITS = "Cluster error: multiple units attempting to become MGS+MDS"
     WAITING_FOR_STORAGE = "Waiting for storage to be provisioned"
     DUPLICATE_STORAGE_ERROR = (
@@ -169,6 +174,9 @@ class LustreCharm(ops.CharmBase):
         try:
             lustre_fs.mgs_mds_setup(LUSTRE_FSNAME, devices)
             self.peers.mgs_nids_published()
+        except LustreFilesystemDeviceCountError as e:
+            logger.warning("invalid number of MGT+MDT devices: %s", e)
+            raise StopCharm(ops.BlockedStatus(_CharmStatus.INVALID_MGT_MDT_DEVICE_COUNT))
         except LustrePeerDuplicateMgsError as e:
             logger.exception("multiple units attempting to run MGS+MDS: %s", e)
             raise StopCharm(ops.BlockedStatus(_CharmStatus.MULTIPLE_MGS_UNITS))
@@ -185,6 +193,9 @@ class LustreCharm(ops.CharmBase):
         try:
             lustre_fs.oss_setup(LUSTRE_FSNAME, self.model.unit.name, data.mgs_nids, devices)
             self.peers.set_unit_ready(data.mgs_nids, LUSTRE_FSNAME)
+        except LustreFilesystemDeviceCountError as e:
+            logger.warning("invalid number of OST devices: %s", e)
+            raise StopCharm(ops.BlockedStatus(_CharmStatus.INVALID_OSS_DEVICE_COUNT))
         except (LustrePeerError, LustreFilesystemError) as e:
             logger.exception("failed to set up OSS: %s", e)
             raise StopCharm(ops.BlockedStatus(_CharmStatus.FAILED_OSS_SETUP))

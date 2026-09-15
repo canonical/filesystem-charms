@@ -13,7 +13,12 @@ import ops
 import pydantic
 from charms.filesystem_client.v0.filesystem_info import LustreInfo
 from constants import LUSTRE_FSNAME, OST_STORAGE
-from errors import LustreFilesystemError, LustrePeerDuplicateMgsError, LustrePeerError
+from errors import (
+    LustreFilesystemDeviceCountError,
+    LustreFilesystemError,
+    LustrePeerDuplicateMgsError,
+    LustrePeerError,
+)
 from lustre_ops import lnet
 from lustre_ops.errors import LNetError
 from state import check_lustre
@@ -30,6 +35,7 @@ class _LustrePeerStatus(StrEnum):
     """Charm status messages for the Lustre peer observer."""
 
     FAILED_OSS_SETUP = "Failed to set up OSS"
+    INVALID_OSS_DEVICE_COUNT = "OST storage requires at least 3 devices for RAIDZ2"
     FAILED_SET_UNIT_READY = "Failed to set unit ready in peer relation"
     MULTIPLE_MGS_UNITS = "Cluster error: multiple units attempting to become MGS+MDS"
 
@@ -276,6 +282,10 @@ class LustrePeerObserver(ops.Object):
 
         try:
             lustre_fs.oss_setup(LUSTRE_FSNAME, self.model.unit.name, data.mgs_nids, devices)
+        except LustreFilesystemDeviceCountError as e:
+            _logger.warning("invalid number of OST devices: %s", e)
+            self.model.unit.status = ops.BlockedStatus(_LustrePeerStatus.INVALID_OSS_DEVICE_COUNT)
+            return False
         except LustreFilesystemError as e:
             _logger.exception("failed to set up OSS: %s", e)
             self.model.unit.status = ops.BlockedStatus(_LustrePeerStatus.FAILED_OSS_SETUP)
