@@ -49,7 +49,7 @@ class _CharmStatus(StrEnum):
     FAILED_PEER_DATA = "Failed to get peer relation app data"
     FAILED_MGS_MDS_SETUP = "Failed to set up MGS+MDS"
     FAILED_OSS_SETUP = "Failed to set up OSS"
-    MULTIPLE_MGS_UNITS = "Cluster error: multiple units have MGT+MDT storage attached"
+    MULTIPLE_MGS_UNITS = "Cluster error: multiple units attempting to become MGS+MDS"
     WAITING_FOR_STORAGE = "Waiting for storage to be provisioned"
     DUPLICATE_STORAGE_ERROR = (
         f"Storage '{MGT_MDT_STORAGE}' and '{OST_STORAGE}' cannot be attached to the same unit"

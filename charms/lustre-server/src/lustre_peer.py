@@ -31,7 +31,7 @@ class _LustrePeerStatus(StrEnum):
 
     FAILED_OSS_SETUP = "Failed to set up OSS"
     FAILED_SET_UNIT_READY = "Failed to set unit ready in peer relation"
-    MULTIPLE_MGS_UNITS = "Cluster error: multiple units have MGT+MDT storage attached"
+    MULTIPLE_MGS_UNITS = "Cluster error: multiple units attempting to become MGS+MDS"
 
 
 class LustrePeerAppData(pydantic.BaseModel):
