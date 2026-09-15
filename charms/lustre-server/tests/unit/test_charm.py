@@ -227,10 +227,9 @@ class TestCharmStart:
         """Start is deferred when a storage device is not yet provisioned, e.g. after a reboot."""
         mock_storage_devices["mgt-mdt"].append(_UnprovisionedStorage())
 
-        ctx.run(ctx.on.start(), testing.State(leader=True))
+        out = ctx.run(ctx.on.start(), testing.State(leader=True))
 
-        # NOTE: the @refresh_check_lustre decorator overwrites the maintenance status
-        # set by the handler, so only assert that no setup path was entered.
+        assert out.unit_status == testing.MaintenanceStatus(charm._CharmStatus.WAITING_FOR_STORAGE)
         mock_mgs_mds_setup.assert_not_called()
         mock_oss_setup.assert_not_called()
 
