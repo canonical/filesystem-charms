@@ -40,6 +40,7 @@ class _CharmStatus(StrEnum):
 
     REPO_SETUP = "Setting up package repository"
     FAILED_REPO_SETUP = "Failed to set up Lustre package repository"
+    WAITING_FOR_PACKAGES = "Waiting for Lustre packages to be installed"
     PACKAGE_INSTALL = "Installing Lustre packages"
     LNET_INIT = "Initializing LNet"
     FAILED_LNET_INIT = "LNet initialization failed"
@@ -121,8 +122,7 @@ class LustreCharm(ops.CharmBase):
     def _on_start(self, _: ops.HookEvent) -> None:
         """Set up Lustre services."""
         if not lustre_fs.is_lustre_installed():
-            logger.warning("attempted to start services before Lustre packages installed")
-            return
+            raise StopCharm(ops.MaintenanceStatus(_CharmStatus.WAITING_FOR_PACKAGES))
 
         self.unit.status = ops.MaintenanceStatus(_CharmStatus.STARTING_SERVICES)
 
