@@ -54,7 +54,7 @@ class _CharmStatus(StrEnum):
         f"Storage '{MGT_MDT_STORAGE}' and '{OST_STORAGE}' cannot be attached to the same unit"
     )
     NO_STORAGE_ATTACHED = (
-        f"No storage attached. Add '{MGT_MDT_STORAGE}' or '{OST_STORAGE}' to this unit"
+        f"No storage attached. Juju add '{MGT_MDT_STORAGE}' or '{OST_STORAGE}' to this unit"
     )
 
     _FAILED_INSTALL_TEMPLATE = "Failed to install packages: {packages}"
