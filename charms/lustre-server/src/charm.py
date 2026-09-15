@@ -141,8 +141,7 @@ class LustreCharm(ops.CharmBase):
             # Storage is registered in the model but is not provisioned yet. Can
             # occur when block devices are not yet re-attached after a reboot.
             logger.warning("storage not yet provisioned: %s", e)
-            self.unit.status = ops.MaintenanceStatus(_CharmStatus.WAITING_FOR_STORAGE)
-            return
+            raise StopCharm(ops.MaintenanceStatus(_CharmStatus.WAITING_FOR_STORAGE))
 
         if mgt_mdt_devices and ost_devices:
             raise StopCharm(ops.BlockedStatus(_CharmStatus.DUPLICATE_STORAGE_ERROR))
