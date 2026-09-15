@@ -16,7 +16,7 @@ from constants import (
     MOUNT_EXECUTABLE,
     ZPOOL_EXECUTABLE,
 )
-from errors import LustreFilesystemError
+from errors import LustreFilesystemDeviceCountError, LustreFilesystemError
 from pytest_mock import MockerFixture
 
 
@@ -80,11 +80,10 @@ class TestMgsMdsSetup:
 
     def test_zpool_failure(self, mocker: MockerFixture) -> None:
         """Zpool creation failure."""
-        mocker.patch("lustre_fs._mgt_mdt_zpool", side_effect=ValueError("failure"))
+        mocker.patch("lustre_fs._mgt_mdt_zpool", side_effect=LustreFilesystemError("failure"))
 
-        with pytest.raises(LustreFilesystemError) as excinfo:
+        with pytest.raises(LustreFilesystemError):
             lustre_fs.mgs_mds_setup(self.FSNAME, self.DEVICES)
-        assert isinstance(excinfo.value.__cause__, ValueError)
 
 
 class TestOssSetup:
@@ -118,11 +117,10 @@ class TestOssSetup:
     def test_zpool_failure(self, mocker: MockerFixture) -> None:
         """Zpool creation failure."""
         devices = ["/dev/0", "/dev/1"]
-        mocker.patch("lustre_fs._ost_zpool", side_effect=ValueError("failure"))
+        mocker.patch("lustre_fs._ost_zpool", side_effect=LustreFilesystemError("failure"))
 
-        with pytest.raises(LustreFilesystemError) as excinfo:
+        with pytest.raises(LustreFilesystemError):
             lustre_fs.oss_setup(self.FSNAME, "lustre/0", self.MGS_NID, devices)
-        assert isinstance(excinfo.value.__cause__, ValueError)
 
 
 class TestMgtMdtZpool:
@@ -158,12 +156,12 @@ class TestMgtMdtZpool:
 
     def test_odd_device_count(self, pool_missing: None) -> None:
         """Error when an odd number of devices is provided for mirroring."""
-        with pytest.raises(ValueError, match="even number"):
+        with pytest.raises(LustreFilesystemDeviceCountError, match="even number"):
             lustre_fs._mgt_mdt_zpool("testpool", ["/dev/sda", "/dev/sdb", "/dev/sdc"])
 
     def test_not_enough_devices(self, pool_missing: None) -> None:
         """Error when fewer than 2 devices are provided for mirroring."""
-        with pytest.raises(ValueError, match="at least 2"):
+        with pytest.raises(LustreFilesystemDeviceCountError, match="at least 2"):
             lustre_fs._mgt_mdt_zpool("testpool", ["/dev/sda"])
 
     def test_zpool_run_error(self, pool_missing: None, mock_run: MagicMock) -> None:
@@ -203,7 +201,7 @@ class TestOstZpool:
 
     def test_not_enough_devices(self, pool_missing: None) -> None:
         """Error when fewer than 3 devices are provided for raidz2."""
-        with pytest.raises(ValueError, match="at least 3"):
+        with pytest.raises(LustreFilesystemDeviceCountError, match="at least 3"):
             lustre_fs._ost_zpool("testpool", ["/dev/sda", "/dev/sdb"])
 
     def test_zpool_run_error(self, pool_missing: None, mock_run: MagicMock) -> None:

@@ -18,7 +18,7 @@ from constants import (
     ZFS_EXECUTABLE,
     ZPOOL_EXECUTABLE,
 )
-from errors import LustreFilesystemError
+from errors import LustreFilesystemDeviceCountError, LustreFilesystemError
 
 _logger = logging.getLogger(__name__)
 
@@ -46,6 +46,7 @@ def mgs_mds_setup(fsname: str, devices: list[str]) -> None:
         devices: Device paths for the MGT+MDT mirror zpool.
 
     Raises:
+        LustreFilesystemDeviceCountError: If an invalid number of devices is provided.
         LustreFilesystemError: If MGS+MDS setup fails.
     """
     dataset = f"{LUSTRE_MGS_MDT_DATASET_PREFIX}0"
@@ -55,12 +56,7 @@ def mgs_mds_setup(fsname: str, devices: list[str]) -> None:
         "Ensuring this unit is running MGS+MDS on pool '%s' and dataset '%s'", pool, dataset
     )
 
-    try:
-        _mgt_mdt_zpool(pool, devices)
-    except ValueError as e:
-        raise LustreFilesystemError(
-            f"Failed to create MGS+MDS zpool '{pool}' with devices {devices}"
-        ) from e
+    _mgt_mdt_zpool(pool, devices)
 
     _lustre_target(fsname, pool, dataset, 0, mkfs_flags=["--mgs", "--mdt"])
     _mount(pool, dataset, LUSTRE_MGS_MDT_MOUNTPOINT)
@@ -78,6 +74,7 @@ def oss_setup(fsname: str, unit_name: str, mgs_nids: list[str], devices: list[st
         devices: Device paths for the OST RAIDZ2 zpool.
 
     Raises:
+        LustreFilesystemDeviceCountError: If an invalid number of devices is provided.
         LustreFilesystemError: If OSS setup fails.
     """
     # Derive OST index from unit name and a fixed stride.
@@ -104,12 +101,7 @@ def oss_setup(fsname: str, unit_name: str, mgs_nids: list[str], devices: list[st
         mgs_nids_str,
     )
 
-    try:
-        _ost_zpool(pool, devices)
-    except ValueError as e:
-        raise LustreFilesystemError(
-            f"Failed to create OST zpool '{pool}' with devices {devices}"
-        ) from e
+    _ost_zpool(pool, devices)
 
     _lustre_target(
         fsname, pool, dataset, ost_index, mkfs_flags=["--ost", f"--mgsnode={mgs_nids_str}"]
@@ -127,6 +119,7 @@ def _mgt_mdt_zpool(pool: str, devices: list[str]) -> None:
         devices: List of device paths to use for the zpool.
 
     Raises:
+        LustreFilesystemDeviceCountError: If an invalid number of devices is provided.
         LustreFilesystemError: If zpool creation fails.
     """
     if _pool_exists(pool):
@@ -134,9 +127,13 @@ def _mgt_mdt_zpool(pool: str, devices: list[str]) -> None:
         return
 
     if len(devices) < 2:
-        raise ValueError("MGT/MDT mirror pool requires at least 2 devices.")
+        raise LustreFilesystemDeviceCountError(
+            "MGT/MDT mirror pool requires at least 2 devices."
+        )
     if len(devices) % 2 != 0:
-        raise ValueError("MGT/MDT mirror pool requires an even number of devices for mirroring.")
+        raise LustreFilesystemDeviceCountError(
+            "MGT/MDT mirror pool requires an even number of devices for mirroring."
+        )
 
     cmd = [ZPOOL_EXECUTABLE, "create", "-O", "canmount=off", pool]
 
@@ -161,6 +158,7 @@ def _ost_zpool(pool: str, devices: list[str]) -> None:
         devices: List of device paths to use for the zpool.
 
     Raises:
+        LustreFilesystemDeviceCountError: If an invalid number of devices is provided.
         LustreFilesystemError: If zpool creation fails.
     """
     if _pool_exists(pool):
@@ -168,7 +166,9 @@ def _ost_zpool(pool: str, devices: list[str]) -> None:
         return
 
     if len(devices) < 3:
-        raise ValueError("OST pool requires at least 3 devices for RAIDZ2.")
+        raise LustreFilesystemDeviceCountError(
+            "OST pool requires at least 3 devices for RAIDZ2."
+        )
 
     cmd = [ZPOOL_EXECUTABLE, "create", "-O", "canmount=off", pool, "raidz2"] + devices
 

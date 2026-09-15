@@ -10,7 +10,11 @@ import lustre_peer
 import ops
 import pytest
 from constants import LUSTRE_FSNAME
-from errors import LustreFilesystemError, LustrePeerDuplicateMgsError
+from errors import (
+    LustreFilesystemDeviceCountError,
+    LustreFilesystemError,
+    LustrePeerDuplicateMgsError,
+)
 from lustre_ops.errors import LNetError
 from pytest_mock import MockerFixture
 
@@ -299,6 +303,23 @@ class TestOnRelationChanged:
 
         assert model.unit.status == ops.BlockedStatus(
             lustre_peer._LustrePeerStatus.FAILED_OSS_SETUP
+        )
+
+    def test_oss_setup_invalid_device_count(
+        self,
+        mocker: MockerFixture,
+        oss_unit: tuple[MagicMock, MagicMock],
+        app_data_event: MagicMock,
+    ) -> None:
+        """OSS service setup fails due to an invalid number of devices."""
+        model, mock_oss = oss_unit
+        mock_oss.side_effect = LustreFilesystemDeviceCountError("too few devices")
+
+        observer = lustre_peer.LustrePeerObserver(mocker.MagicMock())
+        observer._on_relation_changed(app_data_event)
+
+        assert model.unit.status == ops.BlockedStatus(
+            lustre_peer._LustrePeerStatus.INVALID_OSS_DEVICE_COUNT
         )
 
     def test_set_unit_ready_failure(

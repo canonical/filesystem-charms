@@ -11,7 +11,12 @@ import ops
 import pytest
 from charmlibs.apt import PackageError
 from constants import LUSTRE_FSNAME, LUSTRE_PACKAGES
-from errors import LustreFilesystemError, LustrePeerDuplicateMgsError, LustrePeerError
+from errors import (
+    LustreFilesystemDeviceCountError,
+    LustreFilesystemError,
+    LustrePeerDuplicateMgsError,
+    LustrePeerError,
+)
 from lustre_ops.errors import LNetError, RepositoryError
 from lustre_peer import LustrePeerAppData
 from ops import testing
@@ -440,6 +445,25 @@ class TestCharmStart:
 
         assert out.unit_status == testing.BlockedStatus(charm._CharmStatus.FAILED_MGS_MDS_SETUP)
 
+    def test_restart_mgs_unit_invalid_device_count(
+        self,
+        ctx: testing.Context[charm.LustreCharm],
+        mock_mgs_mds_setup: MagicMock,
+        mock_peer_observer: MagicMock,
+        mock_storage_devices: dict[str, list[MagicMock]],
+    ) -> None:
+        """MGS unit restart: mgs_mds_setup fails due to an invalid number of devices."""
+        self._attach(mock_storage_devices, "mgt-mdt", MGT_MDT_DEVICES)
+        app_data = LustrePeerAppData(mgs_nids=["10.0.0.1@tcp"], mgs_unit_name=f"{APP_NAME}/0")
+        mock_peer_observer.return_value.get_app_data.return_value = app_data
+        mock_mgs_mds_setup.side_effect = LustreFilesystemDeviceCountError("odd device count")
+
+        out = ctx.run(ctx.on.start(), testing.State(leader=True))
+
+        assert out.unit_status == testing.BlockedStatus(
+            charm._CharmStatus.INVALID_MGT_MDT_DEVICE_COUNT
+        )
+
     def test_restart_oss_unit_setup_error(
         self,
         ctx: testing.Context[charm.LustreCharm],
@@ -457,3 +481,21 @@ class TestCharmStart:
         out = ctx.run(ctx.on.start(), testing.State(leader=True))
 
         assert out.unit_status == testing.BlockedStatus(charm._CharmStatus.FAILED_OSS_SETUP)
+
+    def test_restart_oss_unit_invalid_device_count(
+        self,
+        ctx: testing.Context[charm.LustreCharm],
+        mock_oss_setup: MagicMock,
+        mock_peer_observer: MagicMock,
+        mock_storage_devices: dict[str, list[MagicMock]],
+    ) -> None:
+        """OSS unit restart: oss_setup fails due to an invalid number of devices."""
+        self._attach(mock_storage_devices, "ost", OST_DEVICES)
+        nids = ["10.0.0.1@tcp"]
+        app_data = LustrePeerAppData(mgs_nids=nids, mgs_unit_name=f"{APP_NAME}/1")
+        mock_peer_observer.return_value.get_app_data.return_value = app_data
+        mock_oss_setup.side_effect = LustreFilesystemDeviceCountError("too few devices")
+
+        out = ctx.run(ctx.on.start(), testing.State(leader=True))
+
+        assert out.unit_status == testing.BlockedStatus(charm._CharmStatus.INVALID_OSS_DEVICE_COUNT)
