@@ -138,7 +138,7 @@ class LustreCharm(ops.CharmBase):
             )
             ost_devices = sorted([str(s.location) for s in self.model.storages[OST_STORAGE]])
         except ops.model.ModelError as e:
-            # Storage is registered in the model is not provisioned yet. Can
+            # Storage is registered in the model but is not provisioned yet. Can
             # occur when block devices are not yet re-attached after a reboot.
             logger.warning("storage not yet provisioned: %s", e)
             self.unit.status = ops.MaintenanceStatus(_CharmStatus.WAITING_FOR_STORAGE)
