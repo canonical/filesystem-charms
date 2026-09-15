@@ -211,8 +211,9 @@ class TestCharmStart:
         mock_is_lustre_installed.return_value = False
         self._attach(mock_storage_devices, "mgt-mdt", MGT_MDT_DEVICES)
 
-        ctx.run(ctx.on.start(), testing.State(leader=True))
+        out = ctx.run(ctx.on.start(), testing.State(leader=True))
 
+        assert out.unit_status == testing.MaintenanceStatus(charm._CharmStatus.WAITING_FOR_PACKAGES)
         mock_mgs_mds_setup.assert_not_called()
         mock_oss_setup.assert_not_called()
 
