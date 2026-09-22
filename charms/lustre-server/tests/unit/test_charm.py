@@ -519,4 +519,6 @@ class TestCharmStart:
 
         out = ctx.run(ctx.on.start(), testing.State(leader=True))
 
-        assert out.unit_status == testing.BlockedStatus(charm._CharmStatus.INVALID_OSS_DEVICE_COUNT)
+        assert out.unit_status == testing.BlockedStatus(
+            charm._CharmStatus.INVALID_OSS_DEVICE_COUNT
+        )

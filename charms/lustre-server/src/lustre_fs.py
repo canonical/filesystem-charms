@@ -127,9 +127,7 @@ def _mgt_mdt_zpool(pool: str, devices: list[str]) -> None:
         return
 
     if len(devices) < 2:
-        raise LustreFilesystemDeviceCountError(
-            "MGT/MDT mirror pool requires at least 2 devices."
-        )
+        raise LustreFilesystemDeviceCountError("MGT/MDT mirror pool requires at least 2 devices.")
     if len(devices) % 2 != 0:
         raise LustreFilesystemDeviceCountError(
             "MGT/MDT mirror pool requires an even number of devices for mirroring."
@@ -166,9 +164,7 @@ def _ost_zpool(pool: str, devices: list[str]) -> None:
         return
 
     if len(devices) < 3:
-        raise LustreFilesystemDeviceCountError(
-            "OST pool requires at least 3 devices for RAIDZ2."
-        )
+        raise LustreFilesystemDeviceCountError("OST pool requires at least 3 devices for RAIDZ2.")
 
     cmd = [ZPOOL_EXECUTABLE, "create", "-O", "canmount=off", pool, "raidz2"] + devices
 
