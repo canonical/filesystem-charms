@@ -127,6 +127,9 @@ class LustreCharm(ops.CharmBase):
     def _on_start(self, _: ops.HookEvent) -> None:
         """Set up Lustre services."""
         if not lustre_fs.is_lustre_installed():
+            if isinstance(self.unit.status, ops.BlockedStatus):
+                # Preserve existing failure from a previous hook (such as install)
+                return
             raise StopCharm(ops.MaintenanceStatus(_CharmStatus.WAITING_FOR_PACKAGES))
 
         self.unit.status = ops.MaintenanceStatus(_CharmStatus.STARTING_SERVICES)

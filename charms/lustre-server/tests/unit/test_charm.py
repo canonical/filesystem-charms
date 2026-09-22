@@ -224,6 +224,27 @@ class TestCharmStart:
         mock_mgs_mds_setup.assert_not_called()
         mock_oss_setup.assert_not_called()
 
+    def test_start_before_install_preserves_blocked_status(
+        self,
+        ctx: testing.Context[charm.LustreCharm],
+        mock_refresh: MagicMock,
+        mock_is_lustre_installed: MagicMock,
+        mock_mgs_mds_setup: MagicMock,
+        mock_oss_setup: MagicMock,
+        mock_storage_devices: dict[str, list[MagicMock]],
+    ) -> None:
+        """Start with packages missing and an existing BlockedStatus is a no-op that preserves the status."""
+        mock_is_lustre_installed.return_value = False
+        self._attach(mock_storage_devices, "mgt-mdt", MGT_MDT_DEVICES)
+        blocked_status = testing.BlockedStatus("install failed")
+        mock_refresh.return_value = blocked_status
+
+        out = ctx.run(ctx.on.start(), testing.State(leader=True, unit_status=blocked_status))
+
+        assert out.unit_status == blocked_status
+        mock_mgs_mds_setup.assert_not_called()
+        mock_oss_setup.assert_not_called()
+
     def test_storage_not_provisioned(
         self,
         ctx: testing.Context[charm.LustreCharm],
