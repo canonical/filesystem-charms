@@ -39,6 +39,28 @@ upgrade:
 repo *args: lock
     {{uv_run}} repository.py {{args}}
 
+# Run the lustre-server BDD integration tests (requires a Juju controller and LXD)
+lustre-integration *args: lock
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    # Drop the optional `--` separator that `just` forwards from the CLI.
+    PASSTHROUGH=()
+    for arg in {{args}}; do
+        [[ "$arg" == "--" ]] || PASSTHROUGH+=("$arg")
+    done
+
+    # Build the charm and export its path. The BDD `pack` step skips
+    # `charmcraft pack` when `LUSTRE_SERVER_CHARM_PATH` is set, and the
+    # `deploy_local` step deploys from it.
+    {{uv_run}} repository.py build lustre-server
+    ln -sfn "$(pwd)/_build/lustre-server.charm" lustre-server.charm
+    export LUSTRE_SERVER_CHARM_PATH=1
+
+    {{uv_run}} pytest -v --exitfirst -s --tb native --log-cli-level=INFO \
+        --juju-bdd-wait-timeout 1800 \
+        ./charms/lustre-server/tests/integration "${PASSTHROUGH[@]}"
+
 # Show available recipes
 help:
     @just --list --unsorted

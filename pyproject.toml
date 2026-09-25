@@ -27,6 +27,8 @@ dev = [
   # Integration
   "jubilant",
   "pytest ~= 9.0",
+  "pytest-bdd ~= 8.0",
+  "pytest-jubilant-bdd ~= 0.14",
   "pytest-order ~= 1.1",
   "pytest-mock ~= 3.15",
   "tenacity >= 8.2,< 10.0",
@@ -61,6 +63,21 @@ source = ["charms", "*/_build"]
 [tool.pytest.ini_options]
 minversion = "6.0"
 log_cli_level = "INFO"
+markers = [
+  # Gherkin tags emitted by gherkinator (type/status/risk)
+  "functional: Functional test plan",
+  "solution: End-to-end solution test plan",
+  "performance: Performance test plan",
+  "reliability: Reliability test plan",
+  "security: Security test plan",
+  "planned: Test plan not yet implemented",
+  "implemented: Implemented test plan",
+  "deprecated: Deprecated test plan",
+  "edge: Edge risk level",
+  "beta: Beta risk level",
+  "candidate: Candidate risk level",
+  "stable: Stable risk level",
+]
 
 # Linting tools configuration
 [tool.ruff]
