@@ -40,8 +40,9 @@ def disable_secureboot(context: Context, model: str) -> None:
         context: Shared test context owning model lifecycle.
         model: Name of the model whose LXD profile will be patched.
     """
-    # Lustre DKMS modules are unsigned and cannot be loaded while secure boot
-    # is enabled, so patch the profile before any machines are deployed.
+    # TODO: Lustre DKMS modules are unsigned and cannot be loaded while secure boot
+    # is enabled, so patch the profile before any machines are deployed. Switch over to Lustre
+    # packages in Universe once they are available.
     juju = context.get_juju(model)
     model_name = juju.model.split(":")[-1]
     lxd_profile = f"juju-{model_name}"
