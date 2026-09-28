@@ -56,14 +56,11 @@ def disable_secureboot(context: Context, model: str) -> None:
         raise RuntimeError(f"lxc profile list failed (rc={result.returncode}): {result.stderr}")
 
     profiles = json.loads(result.stdout)
-    target = next(
-        (
-            (profile.get("project"), profile.get("name"))
-            for profile in profiles
-            if profile.get("name", "").startswith(lxd_profile)
-        ),
-        None,
-    )
+    target = None
+    for profile in profiles:
+        if profile.get("name", "").startswith(lxd_profile):
+            target = (profile["project"], profile["name"])
+            break
     if target is None:
         profile_names = ", ".join(f"{p.get('name')} ({p.get('project')})" for p in profiles)
         raise RuntimeError(
