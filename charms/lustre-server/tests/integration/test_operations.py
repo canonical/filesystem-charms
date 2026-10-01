@@ -19,7 +19,8 @@ import json
 import logging
 import subprocess
 
-from pytest_bdd import given, parsers, scenarios, then
+import jubilant
+from pytest_bdd import given, parsers, scenarios, then, when
 from pytest_jubilant_bdd import Context, flexible
 from pytest_jubilant_bdd.errors import (
     AppNotFoundError,
@@ -118,6 +119,51 @@ def _unit_exists(ctx: Context, unit: str) -> bool:
     except UnitNotFoundError, AppNotFoundError, TooManyDeployedAppsError:
         return False
     return True
+
+
+def _boot_id(juju: jubilant.Juju, unit: str) -> str | None:
+    """Read the boot ID of the machine hosting the given unit.
+
+    Args:
+        juju: Juju CLI harness to execute the ssh command through.
+        unit: Name of the unit whose machine will be queried.
+
+    Returns:
+        The current boot ID, or None if the machine is unreachable.
+    """
+    try:
+        task = juju.exec("cat /proc/sys/kernel/random/boot_id", unit=unit)
+    except jubilant.CLIError, jubilant.TaskError, ValueError:
+        # Machine is still down
+        return None
+    return task.stdout.strip()
+
+
+@when(parsers.parse("I reboot unit '{unit}'"))
+def reboot_unit(context: Context, unit: str) -> None:
+    """Reboot the machine hosting the given unit and wait for it to come back up.
+
+    Args:
+        context: Shared test context owning model lifecycle.
+        unit: Name of the unit whose machine will be rebooted (e.g. "lustre-server/1").
+
+    Raises:
+        TimeoutError: If the machine does not come back up within the wait timeout.
+    """
+    juju = context.get_juju()
+
+    # Capture the boot ID before rebooting and wait for the machine to come back up with a
+    # new boot ID in order to address race condition on unit status checks.
+    #
+    # For example, prevents a subsequent "And the workload status for unit 'lustre-server/1'
+    # is 'active'" check from passing erroneously if the unit is beginning to reboot but its
+    # status has not yet changed.
+    before = _boot_id(juju, unit)
+    juju.exec("systemctl reboot", unit=unit)
+    context.wait(
+        ready=lambda ctx: _boot_id(juju, unit) not in (None, before),
+        timeout=600,
+    )
 
 
 @then(flexible("the ssh output contains '{text}' [and '{other}']"))

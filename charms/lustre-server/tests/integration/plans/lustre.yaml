@@ -82,3 +82,26 @@ scenarios:
     And I ssh into unit 'ubuntu/0' and I execute 'sudo touch /lustre/stripe-test-file'
     And I ssh into unit 'ubuntu/0' and I execute 'lfs getstripe --stripe-count /lustre/stripe-test-file'
     Then the ssh output is '2'
+
+  - |-
+    Reboot an OSS and confirm its mounts are restored
+
+    Given 'lustre-server' is deployed
+    When I reboot unit 'lustre-server/1'
+    And the workload status for unit 'lustre-server/1' is 'active'
+    And the workload status message for unit 'lustre-server/1' is 'OSS ready'
+    And all agents are 'idle' in model 'lustre'
+    And I ssh into unit 'lustre-server/1' and I execute 'mount -t lustre'
+    Then the ssh output contains '/mnt/ost1'
+
+  - |-
+    Adding a unit with MGT+MDT storage is blocked from becoming a second MGS+MDS
+
+    Given 'lustre-server' is deployed
+    And I add '1' units to app 'lustre-server'
+    And I add storage 'mgt-mdt' to unit 'lustre-server/3' from pool 'loop' of size '1G' with '2' instances
+    And '2' instances of storage 'mgt-mdt' are attached to unit 'lustre-server/3'
+    Then the workload status for unit 'lustre-server/3' is 'blocked'
+    And the workload status message for unit 'lustre-server/3' is 'Cluster error: multiple units attempting to become MGS+MDS'
+    And the workload status for unit 'lustre-server/0' is 'active'
+    And the workload status message for unit 'lustre-server/0' is 'MGS+MDS ready'
