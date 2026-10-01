@@ -8,6 +8,7 @@ import logging
 import subprocess
 from pathlib import Path
 
+from charmlibs.systemd import SystemdError, service_restart, service_running
 from constants import (
     LUSTRE_MGS_MDT_DATASET_PREFIX,
     LUSTRE_MGS_MDT_MOUNTPOINT,
@@ -21,6 +22,20 @@ from constants import (
 from errors import LustreFilesystemDeviceCountError, LustreFilesystemError
 
 _logger = logging.getLogger(__name__)
+
+
+def _ensure_zfs_import_service() -> None:
+    """Ensure `zfs-import-cache.service` is running.
+
+    Raises:
+        LustreFilesystemError: If restarting the service fails.
+    """
+    if service_running("zfs-import-cache.service"):
+        return
+    try:
+        service_restart("zfs-import-cache.service")
+    except SystemdError as e:
+        raise LustreFilesystemError("failed to restart zfs-import-cache.service") from e
 
 
 def is_lustre_installed() -> bool:
@@ -122,6 +137,7 @@ def _mgt_mdt_zpool(pool: str, devices: list[str]) -> None:
         LustreFilesystemDeviceCountError: If an invalid number of devices is provided.
         LustreFilesystemError: If zpool creation fails.
     """
+    _ensure_zfs_import_service()
     if _pool_exists(pool):
         _logger.info("ZFS pool '%s' already exists. Skipping creation.", pool)
         return
@@ -159,6 +175,7 @@ def _ost_zpool(pool: str, devices: list[str]) -> None:
         LustreFilesystemDeviceCountError: If an invalid number of devices is provided.
         LustreFilesystemError: If zpool creation fails.
     """
+    _ensure_zfs_import_service()
     if _pool_exists(pool):
         _logger.info("ZFS pool '%s' already exists. Skipping creation.", pool)
         return

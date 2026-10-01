@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import lustre_fs
 import pytest
+from charmlibs.systemd import SystemdError
 from constants import (
     LUSTRE_MGS_MDT_DATASET_PREFIX,
     LUSTRE_OST_DATASET_PREFIX,
@@ -24,6 +25,13 @@ from pytest_mock import MockerFixture
 def mock_run(mocker: MockerFixture) -> MagicMock:
     """Mock subprocess.run."""
     return mocker.patch("lustre_fs.subprocess.run")
+
+
+@pytest.fixture(scope="function", autouse=True)
+def mock_systemd(mocker: MockerFixture) -> MagicMock:
+    """Mock systemd service helpers."""
+    mocker.patch("lustre_fs.service_running", return_value=True)
+    return mocker.patch("lustre_fs.service_restart")
 
 
 @pytest.fixture(scope="function")
@@ -121,6 +129,40 @@ class TestOssSetup:
 
         with pytest.raises(LustreFilesystemError):
             lustre_fs.oss_setup(self.FSNAME, "lustre/0", self.MGS_NID, devices)
+
+
+class TestEnsureZfsImportService:
+    """_ensure_zfs_import_service() tests."""
+
+    SERVICE = "zfs-import-cache.service"
+
+    def test_skips_when_running(self, mocker: MockerFixture) -> None:
+        """Does not restart the service when it is already running."""
+        mock_running = mocker.patch("lustre_fs.service_running", return_value=True)
+        mock_restart = mocker.patch("lustre_fs.service_restart")
+
+        lustre_fs._ensure_zfs_import_service()
+
+        mock_running.assert_called_once_with(self.SERVICE)
+        mock_restart.assert_not_called()
+
+    def test_restarts_when_not_running(self, mocker: MockerFixture) -> None:
+        """Restarts the service when it is not running."""
+        mocker.patch("lustre_fs.service_running", return_value=False)
+        mock_restart = mocker.patch("lustre_fs.service_restart")
+
+        lustre_fs._ensure_zfs_import_service()
+
+        mock_restart.assert_called_once_with(self.SERVICE)
+
+    def test_restart_failure(self, mocker: MockerFixture) -> None:
+        """SystemdError from service_restart is wrapped in LustreFilesystemError."""
+        mocker.patch("lustre_fs.service_running", return_value=False)
+        mocker.patch("lustre_fs.service_restart", side_effect=SystemdError("unit failed"))
+
+        with pytest.raises(LustreFilesystemError) as excinfo:
+            lustre_fs._ensure_zfs_import_service()
+        assert isinstance(excinfo.value.__cause__, SystemdError)
 
 
 class TestMgtMdtZpool:
