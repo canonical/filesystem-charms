@@ -255,9 +255,11 @@ class TestCharmStart:
         mock_storage_devices: dict[str, list[MagicMock]],
         mocker: MockerFixture,
     ) -> None:
-        """Start raises when storage is not yet provisioned after all retries, for example, after a reboot.
+        """Start raises an uncaught `ModelError` after failing to access Juju storage.
 
-        The uncaught `ModelError` causes Juju to retry the hook until storage is attached.
+        Occurs when all retries are exhausted attempting to access storage that is not
+        yet provisioned, for example, after a reboot. The uncaught `ModelError` causes
+        a hook failure and Juju takes over retrying the hook until storage is attached.
         """
         # Disable tenacity's backoff so test doesn't wait for the full set of retries.
         mocker.patch.object(

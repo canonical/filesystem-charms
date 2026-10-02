@@ -134,7 +134,7 @@ class TestOssSetup:
 class TestEnsureZfsImportService:
     """_ensure_zfs_import_service() tests."""
 
-    SERVICE = "zfs-import-cache.service"
+    _service: str = "zfs-import-cache.service"
 
     def test_skips_when_running(self, mocker: MockerFixture) -> None:
         """Does not restart the service when it is already running."""
@@ -143,7 +143,7 @@ class TestEnsureZfsImportService:
 
         lustre_fs._ensure_zfs_import_service()
 
-        mock_running.assert_called_once_with(self.SERVICE)
+        mock_running.assert_called_once_with(self._service)
         mock_restart.assert_not_called()
 
     def test_restarts_when_not_running(self, mocker: MockerFixture) -> None:
@@ -153,7 +153,7 @@ class TestEnsureZfsImportService:
 
         lustre_fs._ensure_zfs_import_service()
 
-        mock_restart.assert_called_once_with(self.SERVICE)
+        mock_restart.assert_called_once_with(self._service)
 
     def test_restart_failure(self, mocker: MockerFixture) -> None:
         """SystemdError from service_restart is wrapped in LustreFilesystemError."""
