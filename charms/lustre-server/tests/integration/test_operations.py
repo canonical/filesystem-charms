@@ -162,7 +162,6 @@ def reboot_unit(context: Context, unit: str) -> None:
     juju.exec("systemctl reboot", unit=unit)
     context.wait(
         ready=lambda ctx: _boot_id(juju, unit) not in (None, before),
-        timeout=600,
     )
 
 
