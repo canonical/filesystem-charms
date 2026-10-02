@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import charm
 import ops
 import pytest
+import tenacity
 from charmlibs.apt import PackageError
 from constants import LUSTRE_FSNAME, LUSTRE_PACKAGES
 from errors import (
@@ -252,13 +253,24 @@ class TestCharmStart:
         mock_oss_setup: MagicMock,
         mock_peer_observer: MagicMock,
         mock_storage_devices: dict[str, list[MagicMock]],
+        mocker: MockerFixture,
     ) -> None:
-        """Start is deferred when a storage device is not yet provisioned, e.g. after a reboot."""
+        """Start raises an uncaught `ModelError` after failing to access Juju storage.
+
+        Occurs when all retries are exhausted attempting to access storage that is not
+        yet provisioned, for example, after a reboot. The uncaught `ModelError` causes
+        a hook failure and Juju takes over retrying the hook until storage is attached.
+        """
+        # Disable tenacity's backoff so test doesn't wait for the full set of retries.
+        mocker.patch.object(
+            charm.LustreCharm._get_storage_devices.retry, "wait", tenacity.wait_none()
+        )
         mock_storage_devices["mgt-mdt"].append(_UnprovisionedStorage())
 
-        out = ctx.run(ctx.on.start(), testing.State(leader=True))
+        with pytest.raises(ops.testing.errors.UncaughtCharmError) as exc_info:
+            ctx.run(ctx.on.start(), testing.State(leader=True))
 
-        assert out.unit_status == testing.MaintenanceStatus(charm._CharmStatus.WAITING_FOR_STORAGE)
+        assert isinstance(exc_info.value.__cause__, ops.model.ModelError)
         mock_mgs_mds_setup.assert_not_called()
         mock_oss_setup.assert_not_called()
 
