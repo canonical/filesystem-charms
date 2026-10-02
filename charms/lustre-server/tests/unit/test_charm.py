@@ -265,7 +265,6 @@ class TestCharmStart:
         )
         mock_storage_devices["mgt-mdt"].append(_UnprovisionedStorage())
 
-        # scenario wraps the charm's uncaught ModelError in UncaughtCharmError.
         with pytest.raises(ops.testing.errors.UncaughtCharmError) as exc_info:
             ctx.run(ctx.on.start(), testing.State(leader=True))
 
