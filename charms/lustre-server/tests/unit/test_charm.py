@@ -255,7 +255,7 @@ class TestCharmStart:
         mock_storage_devices: dict[str, list[MagicMock]],
         mocker: MockerFixture,
     ) -> None:
-        """Start raises when storage is not yet provisioned after all retries, e.g. after a reboot.
+        """Start raises when storage is not yet provisioned after all retries, for example, after a reboot.
 
         The uncaught `ModelError` causes Juju to retry the hook until storage is attached.
         """
