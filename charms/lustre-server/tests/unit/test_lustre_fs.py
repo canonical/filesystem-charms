@@ -200,12 +200,12 @@ class TestMgtMdtZpool:
 
         mock_run.assert_not_called()
 
-    def test_odd_device_count(self, pool_missing: None) -> None:
+    def test_odd_device_count(self, pool_missing: None, mock_systemd: None) -> None:
         """Error when an odd number of devices is provided for mirroring."""
         with pytest.raises(LustreFilesystemDeviceCountError, match="even number"):
             lustre_fs._mgt_mdt_zpool("testpool", ["/dev/sda", "/dev/sdb", "/dev/sdc"])
 
-    def test_not_enough_devices(self, pool_missing: None) -> None:
+    def test_not_enough_devices(self, pool_missing: None, mock_systemd: None) -> None:
         """Error when fewer than 2 devices are provided for mirroring."""
         with pytest.raises(LustreFilesystemDeviceCountError, match="at least 2"):
             lustre_fs._mgt_mdt_zpool("testpool", ["/dev/sda"])
@@ -251,7 +251,7 @@ class TestOstZpool:
 
         mock_run.assert_not_called()
 
-    def test_not_enough_devices(self, pool_missing: None) -> None:
+    def test_not_enough_devices(self, pool_missing: None, mock_systemd: None) -> None:
         """Error when fewer than 3 devices are provided for raidz2."""
         with pytest.raises(LustreFilesystemDeviceCountError, match="at least 3"):
             lustre_fs._ost_zpool("testpool", ["/dev/sda", "/dev/sdb"])
