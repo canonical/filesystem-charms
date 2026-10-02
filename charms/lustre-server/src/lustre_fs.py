@@ -30,10 +30,8 @@ def _ensure_zfs_import_service() -> None:
     Raises:
         LustreFilesystemError: If restarting the service fails.
     """
-    if service_running("zfs-import-cache.service"):
-        return
     try:
-        service_restart("zfs-import-cache.service")
+        service_running("zfs-import-cache.service") or service_restart("zfs-import-cache.service")
     except SystemdError as e:
         raise LustreFilesystemError("failed to restart zfs-import-cache.service") from e
 
