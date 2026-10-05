@@ -270,7 +270,7 @@ requires-dist = [
     { name = "lustre-ops", editable = "internal/lustre-ops" },
     { name = "ops" },
     { name = "pydantic" },
-    { name = "tenacity", specifier = ">=8.2,<10.0" },
+    { name = "tenacity" },
 ]
 
 [[package]]

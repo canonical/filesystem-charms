@@ -212,8 +212,8 @@ class LustreCharm(ops.CharmBase):
         """Repeatedly attempt to get MGT+MDT and OST storage device paths.
 
         Raises:
-            ops.model.ModelError: If storage is still not provisioned after
-                all retries are exhausted.
+            ops.model.ModelError:
+                If storage is still not provisioned after all retries are exhausted.
         """
         mgt_mdt_devices = sorted([str(s.location) for s in self.model.storages[MGT_MDT_STORAGE]])
         ost_devices = sorted([str(s.location) for s in self.model.storages[OST_STORAGE]])
