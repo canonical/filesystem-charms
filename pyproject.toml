@@ -27,7 +27,7 @@ dev = [
   # Integration
   "jubilant",
   "pytest ~= 9.0",
-  "pytest-bdd ~= 8.0",
+  "pytest-bdd >= 8,< 10",
   "pytest-jubilant-bdd ~= 0.14",
   "pytest-order ~= 1.1",
   "pytest-mock ~= 3.15",
