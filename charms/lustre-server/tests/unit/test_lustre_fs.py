@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import lustre_fs
 import pytest
+from charmlibs.systemd import SystemdError
 from constants import (
     LUSTRE_MGS_MDT_DATASET_PREFIX,
     LUSTRE_OST_DATASET_PREFIX,
@@ -24,6 +25,13 @@ from pytest_mock import MockerFixture
 def mock_run(mocker: MockerFixture) -> MagicMock:
     """Mock subprocess.run."""
     return mocker.patch("lustre_fs.subprocess.run")
+
+
+@pytest.fixture(scope="function")
+def mock_systemd(mocker: MockerFixture) -> None:
+    """Mock systemd service helpers."""
+    mocker.patch("lustre_fs.service_running", return_value=True)
+    mocker.patch("lustre_fs.service_restart")
 
 
 @pytest.fixture(scope="function")
@@ -123,10 +131,46 @@ class TestOssSetup:
             lustre_fs.oss_setup(self.FSNAME, "lustre/0", self.MGS_NID, devices)
 
 
+class TestEnsureZfsImportService:
+    """_ensure_zfs_import_service() tests."""
+
+    _service: str = "zfs-import-cache.service"
+
+    def test_skips_when_running(self, mocker: MockerFixture) -> None:
+        """Does not restart the service when it is already running."""
+        mock_running = mocker.patch("lustre_fs.service_running", return_value=True)
+        mock_restart = mocker.patch("lustre_fs.service_restart")
+
+        lustre_fs._ensure_zfs_import_service()
+
+        mock_running.assert_called_once_with(self._service)
+        mock_restart.assert_not_called()
+
+    def test_restarts_when_not_running(self, mocker: MockerFixture) -> None:
+        """Restarts the service when it is not running."""
+        mocker.patch("lustre_fs.service_running", return_value=False)
+        mock_restart = mocker.patch("lustre_fs.service_restart")
+
+        lustre_fs._ensure_zfs_import_service()
+
+        mock_restart.assert_called_once_with(self._service)
+
+    def test_restart_failure(self, mocker: MockerFixture) -> None:
+        """SystemdError from service_restart is wrapped in LustreFilesystemError."""
+        mocker.patch("lustre_fs.service_running", return_value=False)
+        mocker.patch("lustre_fs.service_restart", side_effect=SystemdError("unit failed"))
+
+        with pytest.raises(LustreFilesystemError) as excinfo:
+            lustre_fs._ensure_zfs_import_service()
+        assert isinstance(excinfo.value.__cause__, SystemdError)
+
+
 class TestMgtMdtZpool:
     """_mgt_mdt_zpool() tests."""
 
-    def test_creates_mirror_pool(self, pool_missing: None, mock_run: MagicMock) -> None:
+    def test_creates_mirror_pool(
+        self, pool_missing: None, mock_run: MagicMock, mock_systemd: None
+    ) -> None:
         """Creates a mirrored zpool with the given devices."""
         devices = ["/dev/sda", "/dev/sdb", "/dev/sdc", "/dev/sdd"]
         lustre_fs._mgt_mdt_zpool("testpool", devices)
@@ -148,23 +192,27 @@ class TestMgtMdtZpool:
         actual_cmd = mock_run.call_args[0][0]
         assert actual_cmd == expected_cmd
 
-    def test_skips_when_pool_exists(self, pool_exists: None, mock_run: MagicMock) -> None:
+    def test_skips_when_pool_exists(
+        self, pool_exists: None, mock_run: MagicMock, mock_systemd: None
+    ) -> None:
         """Skips creating the zpool when it already exists."""
         lustre_fs._mgt_mdt_zpool("testpool", ["/dev/sda", "/dev/sdb"])
 
         mock_run.assert_not_called()
 
-    def test_odd_device_count(self, pool_missing: None) -> None:
+    def test_odd_device_count(self, pool_missing: None, mock_systemd: None) -> None:
         """Error when an odd number of devices is provided for mirroring."""
         with pytest.raises(LustreFilesystemDeviceCountError, match="even number"):
             lustre_fs._mgt_mdt_zpool("testpool", ["/dev/sda", "/dev/sdb", "/dev/sdc"])
 
-    def test_not_enough_devices(self, pool_missing: None) -> None:
+    def test_not_enough_devices(self, pool_missing: None, mock_systemd: None) -> None:
         """Error when fewer than 2 devices are provided for mirroring."""
         with pytest.raises(LustreFilesystemDeviceCountError, match="at least 2"):
             lustre_fs._mgt_mdt_zpool("testpool", ["/dev/sda"])
 
-    def test_zpool_run_error(self, pool_missing: None, mock_run: MagicMock) -> None:
+    def test_zpool_run_error(
+        self, pool_missing: None, mock_run: MagicMock, mock_systemd: None
+    ) -> None:
         """Zpool command fails."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "zpool")
 
@@ -176,7 +224,9 @@ class TestMgtMdtZpool:
 class TestOstZpool:
     """_ost_zpool() tests."""
 
-    def test_creates_raidz2_pool(self, pool_missing: None, mock_run: MagicMock) -> None:
+    def test_creates_raidz2_pool(
+        self, pool_missing: None, mock_run: MagicMock, mock_systemd: None
+    ) -> None:
         """Creates a raidz2 zpool with the given devices."""
         devices = ["/dev/sda", "/dev/sdb", "/dev/sdc"]
         lustre_fs._ost_zpool("testpool", devices)
@@ -193,18 +243,22 @@ class TestOstZpool:
         ] + devices
         assert actual_cmd == expected_cmd
 
-    def test_skips_when_pool_exists(self, pool_exists: None, mock_run: MagicMock) -> None:
+    def test_skips_when_pool_exists(
+        self, pool_exists: None, mock_run: MagicMock, mock_systemd: None
+    ) -> None:
         """Skips creating the zpool when it already exists."""
         lustre_fs._ost_zpool("testpool", ["/dev/sda", "/dev/sdb", "/dev/sdc"])
 
         mock_run.assert_not_called()
 
-    def test_not_enough_devices(self, pool_missing: None) -> None:
+    def test_not_enough_devices(self, pool_missing: None, mock_systemd: None) -> None:
         """Error when fewer than 3 devices are provided for raidz2."""
         with pytest.raises(LustreFilesystemDeviceCountError, match="at least 3"):
             lustre_fs._ost_zpool("testpool", ["/dev/sda", "/dev/sdb"])
 
-    def test_zpool_run_error(self, pool_missing: None, mock_run: MagicMock) -> None:
+    def test_zpool_run_error(
+        self, pool_missing: None, mock_run: MagicMock, mock_systemd: None
+    ) -> None:
         """Zpool command fails."""
         mock_run.side_effect = subprocess.CalledProcessError(1, "zpool")
 

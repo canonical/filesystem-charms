@@ -9,6 +9,7 @@ from enum import StrEnum
 
 import lustre_fs
 import ops
+import tenacity
 from charmed_hpc_libs.ops import StopCharm, refresh
 from charmlibs import apt
 from charms.filesystem_client.v0.filesystem_info import FilesystemProvides
@@ -55,7 +56,6 @@ class _CharmStatus(StrEnum):
     FAILED_OSS_SETUP = "Failed to set up OSS"
     INVALID_OSS_DEVICE_COUNT = "OST storage requires at least 3 devices for RAIDZ2"
     MULTIPLE_MGS_UNITS = "Cluster error: multiple units attempting to become MGS+MDS"
-    WAITING_FOR_STORAGE = "Waiting for storage to be provisioned"
     DUPLICATE_STORAGE_ERROR = (
         f"Storage '{MGT_MDT_STORAGE}' and '{OST_STORAGE}' cannot be attached to the same unit"
     )
@@ -140,16 +140,14 @@ class LustreCharm(ops.CharmBase):
             logger.exception("failed to read peer relation data: %s", e)
             raise StopCharm(ops.BlockedStatus(_CharmStatus.FAILED_PEER_DATA))
 
-        try:
-            mgt_mdt_devices = sorted(
-                [str(s.location) for s in self.model.storages[MGT_MDT_STORAGE]]
-            )
-            ost_devices = sorted([str(s.location) for s in self.model.storages[OST_STORAGE]])
-        except ops.model.ModelError as e:
-            # Storage is registered in the model but is not provisioned yet. Can
-            # occur when block devices are not yet re-attached after a reboot.
-            logger.warning("storage not yet provisioned: %s", e)
-            raise StopCharm(ops.MaintenanceStatus(_CharmStatus.WAITING_FOR_STORAGE))
+        # FIXME: intentionally do not catch the `ops.model.ModelError` raised if storage
+        # is not yet provisioned. This can occur after a unit restart when `start` is run
+        # before the storage is reattached. See: https://github.com/juju/juju/issues/23459
+        #
+        # Not catching the exception results in Juju naturally retrying the hook until
+        # storage becomes attached. If the exception is caught, handling options are more
+        # limited. For example, `event.defer` gives no guarantee the event will ever rerun.
+        mgt_mdt_devices, ost_devices = self._get_storage_devices()
 
         if mgt_mdt_devices and ost_devices:
             raise StopCharm(ops.BlockedStatus(_CharmStatus.DUPLICATE_STORAGE_ERROR))
@@ -202,6 +200,24 @@ class LustreCharm(ops.CharmBase):
         except (LustrePeerError, LustreFilesystemError) as e:
             logger.exception("failed to set up OSS: %s", e)
             raise StopCharm(ops.BlockedStatus(_CharmStatus.FAILED_OSS_SETUP))
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(ops.model.ModelError),
+        stop=tenacity.stop_after_attempt(10),
+        wait=tenacity.wait_exponential(multiplier=1, min=1, max=20),
+        before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+        reraise=True,
+    )
+    def _get_storage_devices(self) -> tuple[list[str], list[str]]:
+        """Repeatedly attempt to get MGT+MDT and OST storage device paths.
+
+        Raises:
+            ops.model.ModelError:
+                If storage is still not provisioned after all retries are exhausted.
+        """
+        mgt_mdt_devices = sorted([str(s.location) for s in self.model.storages[MGT_MDT_STORAGE]])
+        ost_devices = sorted([str(s.location) for s in self.model.storages[OST_STORAGE]])
+        return mgt_mdt_devices, ost_devices
 
     @refresh_check_lustre
     def _on_update_status(self, _: ops.UpdateStatusEvent) -> None:
