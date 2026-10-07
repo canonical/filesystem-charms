@@ -383,20 +383,82 @@ class TestPoolExists:
 class TestTargetExists:
     """_target_exists() tests."""
 
-    FULL_DATASET = "testfs-mgsmdt0-pool/mgsmdt0"
+    _fsname: str = "testfs"
+    _pool: str = "testfs-mgsmdt0-pool"
+    _dataset: str = "mgsmdt0"
 
-    @pytest.mark.parametrize("returncode, expected", [(0, True), (1, False)])
+    @pytest.mark.parametrize(
+        ("stdout", "expected"),
+        [
+            (f"{_pool}/{_dataset}\n", True),
+            (f"other-dataset\n{_pool}/{_dataset}\n", True),
+            (f"{_pool}/{_dataset}\nother-dataset\n", True),
+            (f"other-dataset\n{_pool}/{_dataset}\nother-dataset\n", True),
+            ("other-dataset\n", False),
+            ("", False),
+        ],
+    )
     def test_existence(
-        self, mocker: MockerFixture, returncode: int, expected: bool, mock_run: MagicMock
+        self, mocker: MockerFixture, stdout: str, expected: bool, mock_run: MagicMock
     ) -> None:
-        """Checks if target existence check returns the expected result."""
-        mock_run.return_value.returncode = returncode
-        assert lustre_fs._target_exists(self.FULL_DATASET) is expected
+        """Return True when the Lustre target dataset exists and False otherwise."""
+        # Two side_effects as:
+        #   First `zfs` call lists datasets in the pool.
+        #   Second queries `lustre:fsname` on the target dataset.
+        mock_run.side_effect = [
+            MagicMock(stdout=stdout),
+            MagicMock(stdout=f"{self._fsname}\n"),
+        ]
+        assert lustre_fs._target_exists(self._fsname, self._pool, self._dataset) is expected
 
-    def test_zfs_run_error(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
-        """Zfs command fails."""
+    def test_fsname_mismatch(self, mock_run: MagicMock) -> None:
+        """Raise LustreFilesystemError when dataset exists but is not formatted for the Lustre filesystem."""
+        mock_run.side_effect = [
+            MagicMock(stdout=f"{self._pool}/{self._dataset}\n"),
+            MagicMock(stdout="other-fs\n"),
+        ]
+
+        with pytest.raises(LustreFilesystemError) as excinfo:
+            lustre_fs._target_exists(self._fsname, self._pool, self._dataset)
+        assert "not formatted as Lustre target" in str(excinfo.value)
+
+    def test_zfs_list_command_failure(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
+        """CalledProcessError from `zfs list` is wrapped in LustreFilesystemError."""
+        mock_run.side_effect = subprocess.CalledProcessError(1, "zfs", stderr="failure")
+
+        with pytest.raises(LustreFilesystemError) as excinfo:
+            lustre_fs._target_exists(self._fsname, self._pool, self._dataset)
+        assert isinstance(excinfo.value.__cause__, subprocess.CalledProcessError)
+
+    def test_fsname_query_command_failure(self, mock_run: MagicMock) -> None:
+        """CalledProcessError from `zfs get` is wrapped in LustreFilesystemError."""
+        # Two side_effects as:
+        #   First `zfs` call (pool listing) succeeds.
+        #   Second call to query fsname fails.
+        mock_run.side_effect = [
+            MagicMock(stdout=f"{self._pool}/{self._dataset}\n"),
+            subprocess.CalledProcessError(1, "zfs", stderr="failure"),
+        ]
+
+        with pytest.raises(LustreFilesystemError) as excinfo:
+            lustre_fs._target_exists(self._fsname, self._pool, self._dataset)
+        assert isinstance(excinfo.value.__cause__, subprocess.CalledProcessError)
+
+    def test_zfs_list_run_error(self, mocker: MockerFixture, mock_run: MagicMock) -> None:
+        """Zfs executable is missing for `zfs list`."""
         mock_run.side_effect = FileNotFoundError(1, "/bad/path/to/zfs")
 
         with pytest.raises(LustreFilesystemError) as excinfo:
-            lustre_fs._target_exists(self.FULL_DATASET)
+            lustre_fs._target_exists(self._fsname, self._pool, self._dataset)
+        assert isinstance(excinfo.value.__cause__, FileNotFoundError)
+
+    def test_fsname_query_run_error(self, mock_run: MagicMock) -> None:
+        """Zfs executable is missing for `zfs get`."""
+        mock_run.side_effect = [
+            MagicMock(stdout=f"{self._pool}/{self._dataset}\n"),
+            FileNotFoundError(1, "/bad/path/to/zfs"),
+        ]
+
+        with pytest.raises(LustreFilesystemError) as excinfo:
+            lustre_fs._target_exists(self._fsname, self._pool, self._dataset)
         assert isinstance(excinfo.value.__cause__, FileNotFoundError)
