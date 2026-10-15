@@ -14,7 +14,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   # repository.py
-  "rtoml ~= 0.13.0",
+  "rtoml >= 0.13,< 0.15",
 
   # Linting
   "ruff",
