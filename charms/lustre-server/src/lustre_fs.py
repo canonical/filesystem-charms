@@ -24,18 +24,6 @@ from errors import LustreFilesystemDeviceCountError, LustreFilesystemError
 _logger = logging.getLogger(__name__)
 
 
-def _ensure_zfs_import_service() -> None:
-    """Ensure `zfs-import-cache.service` is running.
-
-    Raises:
-        LustreFilesystemError: If restarting the service fails.
-    """
-    try:
-        service_running("zfs-import-cache.service") or service_restart("zfs-import-cache.service")
-    except SystemdError as e:
-        raise LustreFilesystemError("failed to restart zfs-import-cache.service") from e
-
-
 def is_lustre_installed() -> bool:
     """Check if Lustre packages are installed on this unit.
 
@@ -122,6 +110,18 @@ def oss_setup(fsname: str, unit_name: str, mgs_nids: list[str], devices: list[st
     _mount(pool, dataset, Path(LUSTRE_OST_PARENT_DIRECTORY) / dataset)
 
     _logger.info("OST index '%s' for MGS NIDs '%s' ready", ost_index, mgs_nids_str)
+
+
+def _ensure_zfs_import_service() -> None:
+    """Ensure `zfs-import-cache.service` is running.
+
+    Raises:
+        LustreFilesystemError: If restarting the service fails.
+    """
+    try:
+        service_running("zfs-import-cache.service") or service_restart("zfs-import-cache.service")
+    except SystemdError as e:
+        raise LustreFilesystemError("failed to restart zfs-import-cache.service") from e
 
 
 def _mgt_mdt_zpool(pool: str, devices: list[str]) -> None:
@@ -211,7 +211,7 @@ def _lustre_target(
     """
     full_dataset_name = f"{pool}/{dataset}"
 
-    if _target_exists(full_dataset_name):
+    if _target_exists(fsname, pool, dataset):
         _logger.info("Target %s already exists, skipping creation", full_dataset_name)
         return
 
@@ -276,23 +276,80 @@ def _pool_exists(pool: str) -> bool:
         raise LustreFilesystemError(f"Failed to check zpool '{pool}' existence") from e
 
 
-def _target_exists(full_dataset_name: str) -> bool:
-    """Return True if a ZFS dataset with the given name already exists.
+def _dataset_exists(pool: str, dataset: str) -> bool:
+    """Return True if the ZFS dataset exists in the pool, False otherwise.
 
     Args:
-        full_dataset_name: Name of the ZFS dataset to check.
+        pool: Name of the ZFS pool containing the dataset.
+        dataset: Name of the dataset within the pool.
 
     Raises:
-        LustreFilesystemError: If checking the zpool existence fails.
+        LustreFilesystemError: If the ZFS executable is not found or listing
+            the datasets in the pool fails.
+    """
+    try:
+        result = subprocess.run(
+            [ZFS_EXECUTABLE, "list", "-H", "-o", "name", "-d", "1", pool],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError as e:
+        raise LustreFilesystemError(f"ZFS executable '{ZFS_EXECUTABLE}' not found") from e
+    except subprocess.CalledProcessError as e:
+        raise LustreFilesystemError(
+            f"Failed to list datasets in ZFS pool '{pool}': {e.stderr.strip()}"
+        ) from e
+
+    return f"{pool}/{dataset}" in result.stdout.splitlines()
+
+
+def _dataset_fsname(full_dataset_name: str) -> str:
+    """Return the value of the 'lustre:fsname' property on a ZFS dataset.
+
+    Args:
+        full_dataset_name: Full name of the dataset, e.g. 'pool/dataset'.
+
+    Raises:
+        LustreFilesystemError: If the ZFS executable is not found or the
+            property query fails.
     """
     try:
         result = subprocess.run(
             [ZFS_EXECUTABLE, "get", "-H", "-o", "value", "lustre:fsname", full_dataset_name],
             capture_output=True,
             text=True,
+            check=True,
         )
-        return result.returncode == 0 and result.stdout.strip() != "-"
     except FileNotFoundError as e:
+        raise LustreFilesystemError(f"ZFS executable '{ZFS_EXECUTABLE}' not found") from e
+    except subprocess.CalledProcessError as e:
         raise LustreFilesystemError(
-            f"Failed to check ZFS dataset '{full_dataset_name}' existence"
+            f"Failed to query ZFS dataset '{full_dataset_name}': {e.stderr.strip()}"
         ) from e
+
+    return result.stdout.strip()
+
+
+def _target_exists(fsname: str, pool: str, dataset: str) -> bool:
+    """Return True if the dataset is a Lustre target for the filesystem name.
+
+    Args:
+        fsname: Name of the Lustre filesystem.
+        pool: Name of the ZFS pool containing the target.
+        dataset: Name of the dataset within the pool.
+
+    Raises:
+        LustreFilesystemError: If the dataset exists but is not formatted as a
+            Lustre target for the given filesystem, or if a ZFS command fails.
+    """
+    if not _dataset_exists(pool, dataset):
+        return False
+
+    full_dataset_name = f"{pool}/{dataset}"
+    if _dataset_fsname(full_dataset_name) != fsname:
+        raise LustreFilesystemError(
+            f"ZFS dataset '{full_dataset_name}' is not formatted as Lustre target for fsname '{fsname}'"
+        )
+
+    return True
