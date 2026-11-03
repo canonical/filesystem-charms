@@ -8,6 +8,7 @@ multi-rail (multiple interfaces bound to a single LNet network).
 """
 
 import logging
+import re
 import subprocess
 
 import yaml
@@ -102,16 +103,19 @@ def get_nids() -> list[str]:
 def parse_network_config(spec: str) -> dict[str, list[str]]:
     """Parse an operator-supplied LNet network specification string.
 
-    The string is a semicolon-separated list of networks of the form:
-    ``<name>=<iface>[,<iface>...]``, where ``<name>`` is the full LNet network name
+    The string is a comma-separated list of networks of the form:
+    ``<name>(<iface>[,<iface>...])``, where ``<name>`` is the full LNet network name
     (e.g. ``tcp``, ``o2ib1``). Multiple interfaces on one network constitute
     multi-rail. Examples:
 
-        tcp=eth0
-        o2ib=ib0,ib1
-        tcp=eth0; o2ib=ib0,ib1
-        tcp=eth0; tcp1=eth1;
-        o2ib1=ib2
+        tcp(eth0)
+        o2ib(ib0,ib1)
+        tcp(eth0),o2ib(ib0,ib1)
+        tcp(eth0),tcp1(eth1)
+        o2ib1(ib2)
+
+    The legacy semicolon-separated ``<name>=<iface>[,<iface>...]`` syntax is
+    also accepted. The two formats cannot be mixed in a single specification.
 
     Args:
         spec: The specification string.
@@ -128,7 +132,7 @@ def parse_network_config(spec: str) -> dict[str, list[str]]:
         return {}
 
     networks: dict[str, list[str]] = {}
-    for token in spec.split(";"):
+    for token in _network_config_tokens(spec):
         token = token.strip()
         if not token:
             continue
@@ -163,6 +167,29 @@ def parse_network_config(spec: str) -> dict[str, list[str]]:
         networks[name] = interfaces
 
     return networks
+
+
+def _network_config_tokens(spec: str) -> list[str]:
+    """Convert kernel-style entries to the legacy tokens used for validation.
+
+    Validate the whole string before extracting entries so that unmatched text,
+    mixed formats, and stray delimiters cannot be silently discarded.
+    """
+    if "(" not in spec and ")" not in spec:
+        return spec.split(";")
+
+    entry = r"([^\s,;()=]+)\s*\(([^()]*)\)"
+    if not re.fullmatch(rf"{entry}(?:\s*,\s*{entry})*", spec):
+        raise LNetParseError(f"Invalid LNet network specification `{spec}`")
+
+    tokens = []
+    for match in re.finditer(entry, spec):
+        name, interfaces = match.groups()
+        interfaces = interfaces.strip()
+        if interfaces and not re.fullmatch(r"[^\s,;()=]+(?:\s*,\s*[^\s,;()=]+)*", interfaces):
+            raise LNetParseError(f"Invalid LNet network specification `{match.group()}`")
+        tokens.append(f"{name}={interfaces}")
+    return tokens
 
 
 def _add_interfaces(net: str, interfaces: set[str]) -> None:
