@@ -42,10 +42,10 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["charms/*", "internal/*"]
+members = ["charms/*"]
 
 [tool.uv.sources]
-lustre-ops = { workspace = true }
+lustre-ops = { git = "https://github.com/canonical/lustre-server-operator", subdirectory = "lustre-ops", rev = "bc5ca48b80df7c9e3a1d948b2b867ae5f372ac4c" }
 
 [tool.repository]
 
@@ -55,7 +55,6 @@ branch = true
 include = [
     "_build/**/src/*",
     "_build/filesystem-client/lib/charms/filesystem_client/*",
-    "internal/**/src/*",
 ]
 omit = [
     "_build/libs/*"

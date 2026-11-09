@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = "==3.14.*"
 
 [manifest]
@@ -7,8 +7,6 @@ members = [
     "cephfs-server-proxy",
     "filesystem-client",
     "filesystems",
-    "lustre-ops",
-    "lustre-server",
     "lustre-server-proxy",
     "nfs-server-proxy",
     "test-mount-client",
@@ -161,7 +159,7 @@ dependencies = [
 requires-dist = [
     { name = "charmed-hpc-libs", extras = ["ops"] },
     { name = "charmlibs-apt" },
-    { name = "lustre-ops", editable = "internal/lustre-ops" },
+    { name = "lustre-ops", git = "https://github.com/canonical/lustre-server-operator?subdirectory=lustre-ops&rev=bc5ca48b80df7c9e3a1d948b2b867ae5f372ac4c" },
     { name = "ops" },
 ]
 
@@ -207,7 +205,7 @@ requires-dist = [
     { name = "coverage", extras = ["toml"], marker = "extra == 'dev'" },
     { name = "flake8", marker = "extra == 'dev'" },
     { name = "jubilant", marker = "extra == 'dev'" },
-    { name = "lustre-ops", editable = "internal/lustre-ops" },
+    { name = "lustre-ops", git = "https://github.com/canonical/lustre-server-operator?subdirectory=lustre-ops&rev=bc5ca48b80df7c9e3a1d948b2b867ae5f372ac4c" },
     { name = "ops", specifier = "~=3.8.1" },
     { name = "ops", extras = ["testing"], marker = "extra == 'dev'" },
     { name = "pydantic", specifier = ">=2" },
@@ -294,43 +292,11 @@ wheels = [
 [[package]]
 name = "lustre-ops"
 version = "0.0.1"
-source = { editable = "internal/lustre-ops" }
+source = { git = "https://github.com/canonical/lustre-server-operator?subdirectory=lustre-ops&rev=bc5ca48b80df7c9e3a1d948b2b867ae5f372ac4c#bc5ca48b80df7c9e3a1d948b2b867ae5f372ac4c" }
 dependencies = [
     { name = "charmlibs-apt" },
     { name = "pydantic" },
     { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "charmlibs-apt" },
-    { name = "pydantic" },
-    { name = "pyyaml" },
-]
-
-[[package]]
-name = "lustre-server"
-version = "0.0.1"
-source = { virtual = "charms/lustre-server" }
-dependencies = [
-    { name = "charmed-hpc-libs", extra = ["ops"] },
-    { name = "charmlibs-apt" },
-    { name = "charmlibs-systemd" },
-    { name = "lustre-ops" },
-    { name = "ops" },
-    { name = "pydantic" },
-    { name = "tenacity" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "charmed-hpc-libs", extras = ["ops"] },
-    { name = "charmlibs-apt" },
-    { name = "charmlibs-systemd" },
-    { name = "lustre-ops", editable = "internal/lustre-ops" },
-    { name = "ops" },
-    { name = "pydantic" },
-    { name = "tenacity" },
 ]
 
 [[package]]
