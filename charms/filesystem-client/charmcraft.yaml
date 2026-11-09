@@ -41,6 +41,8 @@ parts:
     source: .
     build-snaps:
       - astral-uv
+    build-packages:
+      - git  # Required by uv to fetch `lustre-ops` from its git source.
     override-build: |
       # Regenerate lockfile to use vendored subpackages from `filesystem-charms`.
       uv lock
