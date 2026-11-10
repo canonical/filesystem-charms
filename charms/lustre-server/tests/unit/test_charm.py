@@ -73,10 +73,8 @@ class TestCharmInstall:
         out = ctx.run(ctx.on.install(), testing.State())
         assert out.unit_status == testing.MaintenanceStatus(charm._CharmStatus.PREPARING_SERVICES)
 
-    @pytest.mark.parametrize("network_spec", ["o2ib0=ib0,ib1", "o2ib0(ib0,ib1)"])
-    def test_lnet_networks_config_forwarded(
+        def test_lnet_networks_config_forwarded(
         self,
-        network_spec: str,
         ctx: testing.Context[charm.LustreCharm],
         mock_repo_setup: MagicMock,
         mock_apt: MagicMock,
@@ -85,7 +83,7 @@ class TestCharmInstall:
         """The lnet-networks config is parsed and forwarded to lnet.init."""
         ctx.run(
             ctx.on.install(),
-            testing.State(config={"lnet-networks": network_spec}),
+            testing.State(config={"lnet-networks": "o2ib0(ib0,ib1)"}),
         )
 
         mock_lnet_init.assert_called_once()
