@@ -114,9 +114,6 @@ def parse_network_config(spec: str) -> dict[str, list[str]]:
         tcp(eth0),tcp1(eth1)
         o2ib1(ib2)
 
-    The legacy semicolon-separated ``<name>=<iface>[,<iface>...]`` syntax is
-    also accepted. The two formats cannot be mixed in a single specification.
-
     Args:
         spec: The specification string.
 
@@ -152,8 +149,8 @@ def parse_network_config(spec: str) -> dict[str, list[str]]:
         #   `lnetctl net add --net tcp0 --if eth0`
         # are equivalent, and `lnetctl net show` always renders the NIDs as `@tcp` (no trailing 0).
         #
-        # Check for a trailing 0 here and remove it to ensure configurations like `tcp=eth0` and
-        # `tcp0=eth0` are treated equivalently. Second-to-last character is also checked to avoid
+        # Check for a trailing 0 here and remove it to ensure configurations like `tcp(eth0)` and
+        # `tcp0(eth0)` are treated equivalently. Second-to-last character is also checked to avoid
         # removing a trailing 0 from a network name such as `o2ib10`.
         if len(name) > 1 and name[-1] == "0" and not name[-2].isdigit():
             name = name[:-1]
@@ -170,14 +167,11 @@ def parse_network_config(spec: str) -> dict[str, list[str]]:
 
 
 def _network_config_tokens(spec: str) -> list[str]:
-    """Convert kernel-style entries to the legacy tokens used for validation.
+    """Convert kernel-style entries into tokens for shared validation.
 
     Validate the whole string before extracting entries so that unmatched text,
     mixed formats, and stray delimiters cannot be silently discarded.
     """
-    if "(" not in spec and ")" not in spec:
-        return spec.split(";")
-
     entry = r"([^\s,;()=]+)\s*\(([^()]*)\)"
     if not re.fullmatch(rf"{entry}(?:\s*,\s*{entry})*", spec):
         raise LNetParseError(f"Invalid LNet network specification `{spec}`")
