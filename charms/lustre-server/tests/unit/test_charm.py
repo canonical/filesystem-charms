@@ -73,7 +73,7 @@ class TestCharmInstall:
         out = ctx.run(ctx.on.install(), testing.State())
         assert out.unit_status == testing.MaintenanceStatus(charm._CharmStatus.PREPARING_SERVICES)
 
-        def test_lnet_networks_config_forwarded(
+    def test_lnet_networks_config_forwarded(
         self,
         ctx: testing.Context[charm.LustreCharm],
         mock_repo_setup: MagicMock,
