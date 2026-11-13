@@ -98,7 +98,14 @@ def bootstrap_lustre_server(
         LustreInfo: Information to mount the Lustre share.
     """
     # 3 units: 1x MGS+MDS, 2x OSS.
-    juju.deploy(lustre_server, "lustre-server", base=base, num_units=3, to=[machine_id] * 3)
+    juju.deploy(
+        lustre_server,
+        "lustre-server",
+        base=base,
+        channel=charm_channel(lustre_server),
+        num_units=3,
+        to=[machine_id] * 3,
+    )
 
     # Attach block storage to each unit:
     # - MGS+MDS: even count of devices for mirrored vdevs
