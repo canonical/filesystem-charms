@@ -102,12 +102,14 @@ def test_enable_lustre_sets_manager_flag(
     )
 
 
-def test_lnet_networks_config_parsed(ctx: testing.Context, mock_mounts_manager: MagicMock) -> None:
+def test_lnet_networks_config_parsed(
+    ctx: testing.Context, mock_mounts_manager: MagicMock
+) -> None:
     """The lnet-networks config is parsed before being passed to the manager."""
     state_in = testing.State(
         config={
             "enable-lustre": True,
-            "lnet-networks": "tcp=eth0; o2ib=ib0,ib1",
+            "lnet-networks": "tcp(eth0),o2ib(ib0,ib1)",
         }
     )
     mock_mounts_manager.supported.return_value = True

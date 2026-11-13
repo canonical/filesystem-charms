@@ -131,6 +131,18 @@ juju integrate data:mount my-charm:mount
 
 [`mount_info`]: ./charms/filesystem-client/lib/charms/filesystem_client/v0/mount_info.py
 
+### Configuring Lustre networks
+
+The `lustre-server` and `filesystem-client` charms accept the kernel-style LNet
+syntax for `lnet-networks`, for example `tcp(eth0),o2ib0(ib0,ib1)`. Commas outside
+parentheses separate networks; commas inside parentheses specify multiple interfaces
+for one network (multi-rail). Network names with index zero, such as `tcp0`, are
+equivalent to their bare names, such as `tcp`.
+
+Empty values retain automatic detection;
+malformed input and duplicate network names are rejected. Set this configuration
+before the charm's initial setup; it is not a live network reconfiguration mechanism.
+
 ## 🤔 What's next?
 
 If you want to learn more about all the things you can do with the filesystem charms,

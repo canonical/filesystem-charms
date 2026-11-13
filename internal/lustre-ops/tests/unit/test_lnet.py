@@ -314,27 +314,60 @@ class TestParseNetworkConfig:
     @pytest.mark.parametrize(
         ("spec", "expected"),
         [
-            pytest.param("tcp0=eth0", {"tcp": ["eth0"]}, id="single_network_single_interface"),
-            pytest.param(
-                "o2ib0=ib0,ib1", {"o2ib": ["ib0", "ib1"]}, id="single_network_multi_rail"
+            ("tcp(eth0)", {"tcp": ["eth0"]}),
+            ("o2ib0(ib0,ib1)", {"o2ib": ["ib0", "ib1"]}),
+            ("o2ib1(ib0),o2ib2(ib1)", {"o2ib1": ["ib0"], "o2ib2": ["ib1"]}),
+            ("tcp(eth0),o2ib0(ib0,ib1)", {"tcp": ["eth0"], "o2ib": ["ib0", "ib1"]}),
+            (
+                "  tcp0 ( eth0 , eth1 ) , o2ib10(ib0)  ",
+                {"tcp": ["eth0", "eth1"], "o2ib10": ["ib0"]},
             ),
-            pytest.param(
-                "tcp0=eth0; o2ib0=ib0,ib1",
-                {"tcp": ["eth0"], "o2ib": ["ib0", "ib1"]},
-                id="multiple_networks",
-            ),
-            pytest.param("o2ib1=ib2", {"o2ib1": ["ib2"]}, id="nonzero_seq"),
-            pytest.param(
-                "  tcp0 = eth0 , eth1  ", {"tcp": ["eth0", "eth1"]}, id="strips_whitespace"
-            ),
-            pytest.param("tcp=eth0;;", {"tcp": ["eth0"]}, id="empty_token_skipped"),
-            pytest.param("o2ib10=ib0", {"o2ib10": ["ib0"]}, id="multi_digit_name_not_stripped"),
-            pytest.param("o2ib0=ib0", {"o2ib": ["ib0"]}, id="zero_seq_stripped"),
+            ("tcp(bond0.100),tcp1(enp1s0f0)", {"tcp": ["bond0.100"], "tcp1": ["enp1s0f0"]}),
         ],
     )
-    def test_parse_valid(self, spec: str, expected: dict[str, list[str]]) -> None:
-        """Valid specifications parse to the expected network mapping."""
+    def test_kernel_syntax(self, spec: str, expected: dict[str, list[str]]) -> None:
+        """Kernel-style syntax preserves network boundaries and multi-rail interfaces."""
         assert lnet.parse_network_config(spec) == expected
+
+    @pytest.mark.parametrize(
+        "spec",
+        [
+            "tcp(eth0",
+            "tcpeth0)",
+            "tcp((eth0))",
+            "(eth0)",
+            "tcp(eth0),",
+            ",tcp(eth0)",
+            "tcp(eth0),,o2ib(ib0)",
+            "tcp(eth0)o2ib(ib0)",
+            "tcp(eth0);o2ib(ib0)",
+            "tcp=eth0;o2ib(ib0)",
+            "tcp(eth0),o2ib=ib0",
+            "tcp(eth0)junk",
+            "tcp(eth0,,eth1)",
+            "tcp(,eth0)",
+            "tcp(eth0,)",
+            "tcp(eth0 eth1)",
+            "tcp(eth0=eth1)",
+            "tcp(eth0;eth1)",
+        ],
+    )
+    def test_invalid_kernel_syntax(self, spec: str) -> None:
+        """Malformed or mixed formats must not be partially accepted."""
+        with pytest.raises(LNetParseError, match="Invalid LNet network specification"):
+            lnet.parse_network_config(spec)
+
+    @pytest.mark.parametrize("spec", ["tcp()", "tcp(  )"])
+    def test_kernel_syntax_requires_interfaces(self, spec: str) -> None:
+        """A kernel-style entry must specify at least one interface."""
+        with pytest.raises(LNetParseError, match="No interfaces"):
+            lnet.parse_network_config(spec)
+
+    @pytest.mark.parametrize("spec", ["tcp(eth0),tcp(eth1)", "tcp(eth0),tcp0(eth1)"])
+    def test_kernel_syntax_rejects_duplicate_networks(self, spec: str) -> None:
+        """Duplicate detection accounts for zero-index aliases."""
+        with pytest.raises(LNetParseError, match="Duplicate LNet network"):
+            lnet.parse_network_config(spec)
 
     @pytest.mark.parametrize(
         "spec",
@@ -345,22 +378,17 @@ class TestParseNetworkConfig:
         assert lnet.parse_network_config(spec) == {}
 
     @pytest.mark.parametrize(
-        ("spec", "match"),
-        [
-            pytest.param("tcp=", "No interfaces", id="no_interfaces"),
-            pytest.param("tcp:eth0", "Invalid LNet network specification", id="no_equals_sign"),
-            pytest.param("=eth0", "Empty network name", id="empty_name"),
-            pytest.param("tcp=eth0;tcp=eth1", "Duplicate LNet network", id="duplicate_network"),
-        ],
+        "spec",
+        ["tcp=eth0", "tcp0=eth0; o2ib0=ib0,ib1", "o2ib1=ib2", "tcp=eth0;;", "=eth0"],
     )
-    def test_invalid_raises(self, spec: str, match: str) -> None:
-        """A malformed specification raises error with a descriptive message."""
-        with pytest.raises(LNetParseError, match=match):
+    def test_legacy_syntax_rejected(self, spec: str) -> None:
+        """Legacy equals/semicolon notation is no longer supported."""
+        with pytest.raises(LNetParseError, match="Invalid LNet network specification"):
             lnet.parse_network_config(spec)
 
     def test_trailing_zero_equivalent_to_bare_name(self) -> None:
-        """A trailing 0 on a single-digit network name is stripped (tcp0 == tcp)."""
-        assert lnet.parse_network_config("tcp0=eth0") == lnet.parse_network_config("tcp=eth0")
+        """A trailing 0 on a network name is normalized (tcp0 == tcp)."""
+        assert lnet.parse_network_config("tcp0(eth0)") == lnet.parse_network_config("tcp(eth0)")
 
 
 class TestParseNetworks:

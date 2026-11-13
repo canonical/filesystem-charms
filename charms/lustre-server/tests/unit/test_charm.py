@@ -83,7 +83,7 @@ class TestCharmInstall:
         """The lnet-networks config is parsed and forwarded to lnet.init."""
         ctx.run(
             ctx.on.install(),
-            testing.State(config={"lnet-networks": "o2ib0=ib0,ib1"}),
+            testing.State(config={"lnet-networks": "o2ib0(ib0,ib1)"}),
         )
 
         mock_lnet_init.assert_called_once()
