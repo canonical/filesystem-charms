@@ -14,6 +14,9 @@ request, and mount shared filesystems. We currently have:
 - [`cephfs-server-proxy-operator`](./charms/cephfs-server-proxy): exports Ceph filesystems from Ceph clusters not managed by Juju.
 - [`lustre-server-proxy-operator`](./charms/lustre-server-proxy): exports Lustre filesystems from Lustre servers not managed by Juju.
 
+The `lustre-server` charm, which deploys and manages Lustre servers with Juju, lives in
+[canonical/lustre-server-operator](https://github.com/canonical/lustre-server-operator).
+
 ## ✨ Getting started
 
 ### With a minimal NFS kernel server
