@@ -44,7 +44,7 @@ parts:
     build-packages:
       - git  # Required by uv to fetch `lustre-ops` from its git source.
     override-build: |
-      # Regenerate lockfile to use vendored subpackages from `filesystem-charms`.
+      # Regenerate the lockfile, as the copied monorepo lockfile includes other workspace members.
       uv lock
       craftctl default
     build-environment:
