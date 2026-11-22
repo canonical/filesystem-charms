@@ -36,7 +36,7 @@ def mock_mounts_manager() -> MagicMock:
 def test_manager_mounted_false_if_exc(
     ctx: testing.Context, is_setup: bool, mock_mounts_manager: MagicMock
 ) -> None:
-    """mounted=false is written in the case of a raised exception."""
+    """Test that `mounted=false` is written in the case of a raised exception."""
     mount_rel = testing.SubordinateRelation(endpoint="mount")
     state_in = testing.State(relations={mount_rel})
 
@@ -56,7 +56,7 @@ def test_manager_mounted_false_if_exc(
 def test_successful_mount_sets_mounted_true(
     ctx: testing.Context, mock_mounts_manager: MagicMock
 ) -> None:
-    """mounted=true is written and ActiveStatus is set after a successful mount."""
+    """Test that `mounted=true` is written and `ActiveStatus` is set after a successful mount."""
     mount_rel = testing.SubordinateRelation(
         endpoint="mount",
         remote_app_data={
@@ -89,7 +89,7 @@ def test_successful_mount_sets_mounted_true(
 def test_enable_lustre_sets_manager_flag(
     ctx: testing.Context, enable_lustre: bool, mock_mounts_manager: MagicMock
 ) -> None:
-    """The enable-lustre config determines if the mount manager enables lustre support."""
+    """Test that the `enable-lustre` config determines if the mount manager enables lustre support."""
     state_in = testing.State(config={"enable-lustre": enable_lustre})
     mock_mounts_manager.supported.return_value = True
     mock_mounts_manager.is_setup.return_value = True
@@ -103,7 +103,7 @@ def test_enable_lustre_sets_manager_flag(
 
 
 def test_lnet_networks_config_parsed(ctx: testing.Context, mock_mounts_manager: MagicMock) -> None:
-    """The lnet-networks config is parsed before being passed to the manager."""
+    """Test that the `lnet-networks` config is parsed before being passed to the manager."""
     state_in = testing.State(
         config={
             "enable-lustre": True,

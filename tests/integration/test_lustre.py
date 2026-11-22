@@ -11,7 +11,7 @@ from constants import (
     MOUNT_PROVIDER,
     MOUNT_REQUIRERS,
 )
-from helpers import bootstrap_lustre_server, charm_channel, check_files
+from helpers import bootstrap_lustre_server, charm_channel, check_files, check_noexec
 
 logger = logging.getLogger(__name__)
 pytestmark = pytest.mark.lustre
@@ -87,6 +87,7 @@ def test_lustre(juju: jubilant.Juju, server_app: str) -> None:
     check_files(juju, "ubuntu/0", "/lustre")
     for app in MOUNT_REQUIRERS:
         check_files(juju, f"{app}/0", f"/{app}")
+    check_noexec(juju, "/lustre")
 
     juju.remove_relation(f"{FILESYSTEM_CLIENT}:filesystem", f"{server_app}:filesystem")
     juju.remove_relation(f"{MOUNT_PROVIDER}:filesystem", f"{server_app}:filesystem")

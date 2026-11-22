@@ -54,7 +54,7 @@ class TestFilesystemInfo:
         ],
     )
     def test_hostinfo(self, host: str, parsed: tuple[str, int | None]):
-        """Test the _hostinfo utility function."""
+        """Test that `_hostinfo` parses the host and optional port."""
         assert _hostinfo(host) == parsed
 
     @pytest.mark.parametrize(
@@ -71,6 +71,6 @@ class TestFilesystemInfo:
         ],
     )
     def test_nfs_info_uri_round_trip(self, uri: str, info: NfsInfo):
-        """Test roundtrip from `NfsInfo` to URI string."""
+        """Test that `NfsInfo` round-trips to and from a URI string."""
         assert NfsInfo.from_uri(uri, None) == info
         assert info.to_uri(None) == uri

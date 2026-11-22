@@ -105,7 +105,7 @@ def mount_requirer_ctx() -> testing.Context:
 
 
 def test_provider_mount_requested(mount_provider_ctx: testing.Context):
-    """Test handler when the mount client has provided the mount info."""
+    """Test that `mounted=true` is written when the mount client provides the mount info."""
     rel = testing.SubordinateRelation(
         endpoint=MOUNT_RELATION_NAME,
         interface=MOUNT_RELATION_INTERFACE,
@@ -120,7 +120,7 @@ def test_provider_mount_requested(mount_provider_ctx: testing.Context):
 
 
 def test_provider_mount_unrequested(mount_provider_ctx: testing.Context):
-    """Test handler when the mount client has removed the mount info."""
+    """Test that `mounted=false` is written when the mount client removes the mount info."""
     rel = testing.SubordinateRelation(
         endpoint=MOUNT_RELATION_NAME,
         interface=MOUNT_RELATION_INTERFACE,
@@ -135,7 +135,7 @@ def test_provider_mount_unrequested(mount_provider_ctx: testing.Context):
 
 
 def test_requirer_mount_provider_connected(mount_requirer_ctx: testing.Context):
-    """Test handler when the mount provider connects."""
+    """Test that the mount info is published when the mount provider connects."""
     ctx = mount_requirer_ctx
     state_in = testing.State.from_context(ctx, leader=True)
     rel_in = state_in.get_relations(MOUNT_RELATION_NAME)[0]
@@ -147,7 +147,7 @@ def test_requirer_mount_provider_connected(mount_requirer_ctx: testing.Context):
 
 
 def test_requirer_mounted_filesystem(mount_requirer_ctx: testing.Context):
-    """Test handler when the mount provider has mounted the filesystem."""
+    """Test that `ActiveStatus` is set when the mount provider has mounted the filesystem."""
     rel = testing.SubordinateRelation(
         endpoint=MOUNT_RELATION_NAME,
         interface=MOUNT_RELATION_INTERFACE,
@@ -161,7 +161,7 @@ def test_requirer_mounted_filesystem(mount_requirer_ctx: testing.Context):
 
 
 def test_requirer_unmounted_filesystem(mount_requirer_ctx: testing.Context):
-    """Test handler when the mount provider has unmounted the filesystem."""
+    """Test that `WaitingStatus` is set when the mount provider has unmounted the filesystem."""
     rel = testing.SubordinateRelation(
         endpoint=MOUNT_RELATION_NAME,
         interface=MOUNT_RELATION_INTERFACE,
@@ -175,7 +175,7 @@ def test_requirer_unmounted_filesystem(mount_requirer_ctx: testing.Context):
 
 
 def test_requirer_mount_provider_disconnected(mount_requirer_ctx: testing.Context):
-    """Test handler when the mount provider disconnects."""
+    """Test that `BlockedStatus` is set when the mount provider disconnects."""
     ctx = mount_requirer_ctx
     state_in = testing.State.from_context(ctx, leader=True)
     rel_in = state_in.get_relations(MOUNT_RELATION_NAME)[0]
