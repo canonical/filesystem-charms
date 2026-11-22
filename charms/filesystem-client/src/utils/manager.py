@@ -7,13 +7,14 @@ import contextlib
 import logging
 import os
 import pathlib
+import subprocess
 from collections.abc import Iterator
 from dataclasses import dataclass
 from ipaddress import AddressValueError, IPv6Address
 
 import ops
 from charmed_hpc_libs.errors import SystemdError, UnknownVirtualizationStateError
-from charmed_hpc_libs.ops import is_container, systemctl
+from charmed_hpc_libs.ops import call, is_container, systemctl
 from charmlibs import apt
 from charms.filesystem_client.v0.filesystem_info import (
     CephfsInfo,
@@ -203,6 +204,17 @@ class MountsManager:
         `Mounts` will be mounted by the manager. Mounts that were
         added on previous executions will get removed if they're not added again
         to the `Mounts` object.
+
+        If the autofs map changes, automount is signaled with `SIGUSR1` to
+        expire idle mounts because autofs does not remount active shares with
+        the new options. Idle shares are remounted with the new options applied on
+        the next access. Shares that are in use are left unmodified and will have the new
+        options applied after the next autofs idle expiry.
+
+        Raises:
+            Error:
+                Raised if the autofs map could not be applied, or if
+                automount could not be signaled to expire idle mounts.
         """
         mounts = Mounts(self.enable_lustre)
         yield mounts
@@ -230,6 +242,14 @@ class MountsManager:
         except SystemdError as e:
             _logger.error("failed to mount filesystems", exc_info=e)
             raise Error(str(e))
+
+        # Expire idle mounts so that they are remounted with the new options
+        # on the next access. Mounts that are in use are left untouched.
+        try:
+            call("killall", "-USR1", "automount")
+        except subprocess.CalledProcessError as e:
+            _logger.error("failed to expire idle mounts", exc_info=e)
+            raise Error(f"failed to expire idle mounts: {e.stderr}")
 
 
 def _get_endpoint_and_opts(info: FilesystemInfo, enable_lustre: bool) -> tuple[str, list[str]]:

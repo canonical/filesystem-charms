@@ -22,6 +22,7 @@ from helpers import (
     bootstrap_nfs_server,
     charm_channel,
     check_files,
+    check_noexec,
 )
 
 logger = logging.getLogger(__name__)
@@ -169,6 +170,7 @@ def test_nfs(juju: jubilant.Juju) -> None:
     check_files(juju, "ubuntu/0", "/nfs")
     for app in MOUNT_REQUIRERS:
         check_files(juju, f"{app}/0", f"/{app}")
+    check_noexec(juju, "/nfs")
 
     # Force clients to mount using NFSv4 and verify that the mounts are updated.
     juju.config(NFS_SERVER_PROXY, values={"force-v4": "true"})
@@ -223,6 +225,7 @@ def test_cephfs(juju: jubilant.Juju) -> None:
     check_files(juju, "ubuntu/0", "/cephfs")
     for app in MOUNT_REQUIRERS:
         check_files(juju, f"{app}/0", f"/{app}")
+    check_noexec(juju, "/cephfs")
 
     juju.remove_relation(f"{FILESYSTEM_CLIENT}:filesystem", f"{CEPHFS_SERVER_PROXY}:filesystem")
     juju.remove_relation(f"{MOUNT_PROVIDER}:filesystem", f"{CEPHFS_SERVER_PROXY}:filesystem")

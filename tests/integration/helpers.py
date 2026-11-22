@@ -12,6 +12,7 @@ from pathlib import Path
 import jubilant
 import tenacity
 from charms.filesystem_client.v0.filesystem_info import CephfsInfo, LustreInfo, NfsInfo
+from constants import FILESYSTEM_CLIENT
 
 _logger = logging.getLogger(__name__)
 
@@ -84,6 +85,9 @@ def bootstrap_nfs_server(juju: jubilant.Juju, machine_id: str, base: str) -> Nfs
     for i in [1, 2, 3]:
         juju.exec(f"sudo touch /data/test-{i}", unit=unit)
 
+    # Add an executable to check the `noexec` mount option.
+    juju.exec("sudo cp /bin/true /data/exec-test", unit=unit)
+
     address = juju.exec("hostname", unit=unit).stdout.strip()
     _logger.info("NFS share endpoint is nfs://%s/data", address)
     return NfsInfo(hostname=address, port=None, path="/data")
@@ -126,6 +130,7 @@ def bootstrap_lustre_server(
     juju.exec(f"mount -t lustre {host}:/{LUSTRE_FS_NAME} /mnt/scratch", unit=unit)
     for i in [1, 2, 3]:
         juju.exec(f"touch /mnt/scratch/test-{i}", unit=unit)
+    juju.exec("cp /bin/true /mnt/scratch/exec-test", unit=unit)
 
     _logger.info("Lustre share host is %s with filesystem name %s", host, LUSTRE_FS_NAME)
     return LustreInfo(mgs_ids=[host], fs_name=LUSTRE_FS_NAME)
@@ -190,6 +195,9 @@ def bootstrap_microceph(juju: jubilant.Juju, machine_id: str, base: str) -> Ceph
     for i in [1, 2, 3]:
         juju.exec(f"sudo touch /mnt/cephfs/test-{i}", unit=unit)
 
+    # Add an executable to check the `noexec` mount option.
+    juju.exec("sudo cp /bin/true /mnt/cephfs/exec-test", unit=unit)
+
     return _get_cephfs_info(juju, unit)
 
 
@@ -231,3 +239,45 @@ def check_files(juju: jubilant.Juju, unit_name: str, path: str) -> None:
     assert "test-1" in result
     assert "test-2" in result
     assert "test-3" in result
+
+
+def check_noexec(juju: jubilant.Juju, mountpoint: str) -> None:
+    """Check that changing `noexec` is applied to an already-mounted filesystem."""
+    for noexec in (True, False):
+        # Trigger an automount to see if the client applies the new options
+        # even when the filesystem is already mounted
+        juju.exec(f"ls {mountpoint}", unit="ubuntu/0")
+
+        juju.config(FILESYSTEM_CLIENT, values={"noexec": str(noexec).lower()})
+        juju.wait(
+            lambda status: jubilant.all_active(status, FILESYSTEM_CLIENT),
+            error=lambda status: jubilant.any_error(status, FILESYSTEM_CLIENT),
+        )
+
+        _check_noexec_applied(juju, mountpoint, noexec)
+
+
+# Retry the verification until the share has been unmounted and remounted with the
+# new options, since SIGUSR1 is asynchronous.
+@tenacity.retry(
+    wait=tenacity.wait_exponential(multiplier=2, min=1, max=10),
+    stop=tenacity.stop_after_attempt(12),
+    reraise=True,
+)
+def _check_noexec_applied(juju: jubilant.Juju, mountpoint: str, noexec: bool) -> None:
+    """Assert the noexec option has been applied to the mount."""
+    juju.exec(f"ls {mountpoint}", unit="ubuntu/0")
+    mounts = juju.exec(f"grep ' {mountpoint} ' /proc/mounts", unit="ubuntu/0").stdout
+    assert ("noexec" in mounts) == noexec
+    assert _can_execute(juju, "ubuntu/0", mountpoint) != noexec
+
+
+def _can_execute(juju: jubilant.Juju, unit: str, mountpoint: str) -> bool:
+    """Return whether binaries can be executed on the filesystem."""
+    try:
+        juju.exec(f"{mountpoint}/exec-test", unit=unit)
+    except jubilant.TaskError as exc:
+        if exc.task.return_code == 126 and "Permission denied" in exc.task.stderr:
+            return False
+        raise exc
+    return True
